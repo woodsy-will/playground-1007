@@ -7,8 +7,8 @@ llm:
   temperature: 0.1
   endpoint: "http://localhost:8080/v1"
 
-geodatabase:
-  path: "data/project.gdb"
+geopackage:
+  path: "data/project.gpkg"
   layers:
     - harvest_units
     - streams

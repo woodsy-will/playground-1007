@@ -2,11 +2,11 @@
 
 ## Objective
 
-Natural language interface translating user queries into spatial SQL/ArcPy operations against a file geodatabase. Locally hosted LLM with RAG over schema metadata and few-shot examples.
+Natural language interface translating user queries into spatial SQL operations against a GeoPackage database. Locally hosted LLM with RAG over schema metadata and few-shot examples.
 
 ## Data Requirements
 
-- **Geodatabase:** FGDB containing harvest units, classified streams, roads, sensitive habitats, ownership parcels, LiDAR tile index
+- **Database:** GeoPackage (.gpkg) containing harvest units, classified streams, roads, sensitive habitats, ownership parcels, LiDAR tile index
 - **LLM:** Quantized open-source model (Llama 3 8B or Mistral 7B) on Proxmox infrastructure
 - **CRS:** EPSG:3310
 
@@ -19,13 +19,13 @@ User query (natural language)
 RAG retrieval (schema metadata + few-shot examples)
         │
         ▼
-LLM generates SQL/ArcPy expression
+LLM generates SpatiaLite SQL expression
         │
         ▼
 Validation layer (whitelist SELECT, reject destructive ops)
         │
         ▼
-Execution against FGDB
+Execution against GeoPackage via SpatiaLite
         │
         ▼
 Map layer or summary table returned
