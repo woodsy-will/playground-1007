@@ -1,0 +1,38 @@
+name: sierra-spatial
+channels:
+  - conda-forge
+  - defaults
+
+dependencies:
+  - python=3.11
+  - geopandas>=0.14
+  - rasterio>=1.3
+  - shapely>=2.0
+  - pyproj>=3.6
+  - fiona>=1.9
+  - pdal>=2.6
+  - python-pdal>=3.2
+  - whiteboxtools>=2.3
+  - scikit-learn>=1.4
+  - scipy>=1.12
+  - numpy>=1.26
+  - pandas>=2.1
+  - matplotlib>=3.8
+  - seaborn>=0.13
+  - plotly>=5.18
+  - dash>=2.14
+  - pystac-client>=0.7
+  - rioxarray>=0.15
+  - xarray>=2024.1
+  - rasterstats>=0.19
+  - pytest>=8.0
+  - pytest-cov>=4.1
+  - pyyaml>=6.0
+  - requests>=2.31
+  - tqdm>=4.66
+  - jupyter>=1.0
+  - ipykernel>=6.28
+  - pip:
+    - maxnet>=0.1  # MaxEnt via glmnet
+    - elapid>=0.3  # Python MaxEnt alternative
+    - laspy>=2.5

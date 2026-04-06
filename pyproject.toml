@@ -1,0 +1,20 @@
+[project]
+name = "sierra-spatial-portfolio"
+version = "0.1.0"
+description = "Advanced geospatial analytics for Sierra Nevada forest management"
+requires-python = ">=3.11"
+license = {text = "MIT"}
+authors = [{name = "William Steinley"}]
+
+[tool.pytest.ini_options]
+testpaths = ["projects"]
+python_files = ["test_*.py"]
+python_functions = ["test_*"]
+addopts = "-v --tb=short"
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "N", "UP"]

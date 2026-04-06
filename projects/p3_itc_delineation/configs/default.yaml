@@ -1,0 +1,25 @@
+# P3 — ITC Delineation Configuration
+# All paths relative to project root
+
+data:
+  lidar_dir: "data/raw/lidar/"
+  cruise_plots: "data/raw/cruise_plots.csv"
+  output_dir: "data/processed/"
+
+processing:
+  crs: "EPSG:3310"
+  dtm_resolution: 1.0          # meters
+  chm_smoothing_sigma: 0.67    # Gaussian kernel sigma (meters)
+  min_tree_height: 5.0          # meters — suppress understory false positives
+  min_crown_area: 4.0           # m² — suppress spurious segments
+  local_max_method: "variable_window"  # or "fixed_window"
+  segmentation_method: "watershed"     # or "dalponte2016", "silva2016"
+
+allometry:
+  source: "pillsbury_kirkley_1984"
+  # BA (sq ft) = 0.005454 * DBH_inches^2
+  ba_constant: 0.005454
+
+validation:
+  match_distance: 3.0   # meters — max distance for tree-to-stem matching
+  stratify_by: ["species_group", "diameter_class"]

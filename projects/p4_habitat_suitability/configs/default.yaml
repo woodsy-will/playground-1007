@@ -1,0 +1,24 @@
+# P4 — Habitat Suitability Configuration
+
+species:
+  name: "Pekania pennanti"
+  common_name: "Pacific fisher"
+  occurrence_sources: ["GBIF", "CNDDB"]
+  thinning_distance_km: 1.0
+
+predictors:
+  topographic: ["elevation", "slope", "tpi", "twi"]
+  climatic_source: "worldclim_v2"     # or "prism"
+  canopy_source: "nlcd"               # or "lidar_chm"
+
+modeling:
+  crs: "EPSG:3310"
+  algorithms: ["maxent", "random_forest"]
+  cv_method: "spatial_block"
+  cv_folds: 5
+  background_sampling: "target_group"
+
+projection:
+  scenarios: ["ssp245", "ssp585"]
+  time_steps: [2050, 2090]
+  climate_source: "basin_characterization_model"  # or "cal_adapt"

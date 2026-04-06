@@ -1,0 +1,41 @@
+# P2 — LLM Spatial Query Configuration
+
+llm:
+  model: "meta-llama/Meta-Llama-3-8B-Instruct"
+  quantization: "GPTQ-4bit"
+  max_tokens: 512
+  temperature: 0.1
+  endpoint: "http://localhost:8080/v1"
+
+geodatabase:
+  path: "data/project.gdb"
+  layers:
+    - harvest_units
+    - streams
+    - roads
+    - sensitive_habitats
+    - ownership_parcels
+    - lidar_tile_index
+
+safety:
+  allowed_operations:
+    - "SELECT"
+    - "ST_Buffer"
+    - "ST_Intersects"
+    - "ST_Within"
+    - "ST_Contains"
+    - "ST_Area"
+    - "ST_Length"
+  blocked_operations:
+    - "DELETE"
+    - "DROP"
+    - "UPDATE"
+    - "INSERT"
+    - "ALTER"
+    - "TRUNCATE"
+
+rag:
+  few_shot_examples: "configs/few_shot_queries.yaml"
+  schema_metadata: "configs/schema_metadata.yaml"
+  chunk_size: 512
+  top_k: 5

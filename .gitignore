@@ -1,0 +1,55 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+dist/
+build/
+.eggs/
+
+# Data — track indices and configs, not raw data
+*.las
+*.laz
+*.tif
+*.tiff
+*.img
+*.gdb/
+*.shp
+*.shx
+*.dbf
+*.prj
+*.cpg
+*.sbn
+*.sbx
+shared/data/raw/
+shared/data/interim/
+
+# Jupyter
+.ipynb_checkpoints/
+*.ipynb_metadata/
+
+# Environment
+.env
+*.env.local
+.conda/
+.venv/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Model artifacts (track configs, not binaries)
+*.joblib
+*.pkl
+*.h5
+*.pt
+
+# Outputs — regenerate from code
+outputs/
+results/
+figures/
