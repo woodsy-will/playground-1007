@@ -1,7 +1,7 @@
 """Download WorldClim v2 bioclimatic rasters.
 
 Fetches 30-second (~1 km) resolution BioClim variables from the
-WorldClim website and clips to a bounding box.
+WorldClim website.
 
 Usage:
     python -m shared.data.download_worldclim \
@@ -15,7 +15,6 @@ from pathlib import Path
 
 import requests
 from tqdm import tqdm
-
 
 WORLDCLIM_BASE = "https://biogeo.ucdavis.edu/data/worldclim/v2.1/base"
 

@@ -336,3 +336,75 @@ class TestSanitizeSql:
         sql = "  \n  SELECT * FROM t  \n  "
         result = sanitize_sql(sql)
         assert result == "SELECT * FROM t"
+
+
+# -----------------------------------------------------------------------
+# SQLite-specific dangerous keywords (always blocked)
+# -----------------------------------------------------------------------
+
+class TestSQLiteDangerousKeywords:
+    """PRAGMA, ATTACH, DETACH, VACUUM, and load_extension must always
+    be blocked, regardless of the user-configurable blocklist."""
+
+    def test_pragma_blocked(self, safety_config: dict) -> None:
+        sql = "SELECT * FROM harvest_units; PRAGMA table_info(harvest_units)"
+        is_valid, reason = validate_sql(sql, safety_config)
+        assert not is_valid
+
+    def test_pragma_standalone_blocked(self, safety_config: dict) -> None:
+        sql = "PRAGMA table_info(harvest_units)"
+        is_valid, reason = validate_sql(sql, safety_config)
+        assert not is_valid
+
+    def test_attach_blocked(self, safety_config: dict) -> None:
+        sql = "ATTACH DATABASE ':memory:' AS evil"
+        is_valid, _ = validate_sql(sql, safety_config)
+        assert not is_valid
+
+    def test_detach_blocked(self, safety_config: dict) -> None:
+        sql = "DETACH DATABASE evil"
+        is_valid, _ = validate_sql(sql, safety_config)
+        assert not is_valid
+
+    def test_vacuum_blocked(self, safety_config: dict) -> None:
+        sql = "VACUUM"
+        is_valid, _ = validate_sql(sql, safety_config)
+        assert not is_valid
+
+    def test_load_extension_in_select_blocked(self, safety_config: dict) -> None:
+        """load_extension() called inside a SELECT must be caught."""
+        sql = "SELECT load_extension('evil.so')"
+        is_valid, reason = validate_sql(sql, safety_config)
+        assert not is_valid
+        assert "LOAD_EXTENSION" in reason
+
+    def test_load_extension_case_insensitive(self, safety_config: dict) -> None:
+        sql = "SELECT Load_Extension('mod_spatialite') FROM harvest_units"
+        is_valid, _ = validate_sql(sql, safety_config)
+        assert not is_valid
+
+    def test_pragma_case_insensitive(self, safety_config: dict) -> None:
+        sql = "pragma table_info(harvest_units)"
+        is_valid, _ = validate_sql(sql, safety_config)
+        assert not is_valid
+
+
+# -----------------------------------------------------------------------
+# String literal edge cases
+# -----------------------------------------------------------------------
+
+class TestStringLiteralEdgeCases:
+    """Ensure the validator handles tricky string literals correctly."""
+
+    def test_escaped_quotes_pass(self, safety_config: dict) -> None:
+        """SQL escaped quotes (O''Brien) should not break validation."""
+        sql = "SELECT * FROM harvest_units WHERE unit_name = 'O''Brien'"
+        is_valid, reason = validate_sql(sql, safety_config)
+        assert is_valid, reason
+
+    def test_semicolon_inside_string_literal(self, safety_config: dict) -> None:
+        """Semicolons inside string literals should not trigger injection
+        detection."""
+        sql = "SELECT * FROM harvest_units WHERE unit_name = 'a;b'"
+        is_valid, reason = validate_sql(sql, safety_config)
+        assert is_valid, reason
