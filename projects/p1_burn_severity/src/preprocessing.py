@@ -10,6 +10,10 @@ from pathlib import Path
 from typing import Any
 
 import numpy as np
+import rasterio
+from rasterio.crs import CRS
+from rasterio.warp import Resampling, calculate_default_transform
+from rasterio.warp import reproject as warp_reproject
 
 from shared.utils.crs import DEFAULT_CRS
 from shared.utils.io import read_raster, read_vector
@@ -91,8 +95,44 @@ def reproject_and_clip(
     """
     target_crs = config.get("processing", {}).get("crs", str(DEFAULT_CRS))
 
-    # Read the raster
+    # Read the raster from disk (need file path for warp metadata)
+    raster_path = Path(raster_path)
     data, profile = read_raster(raster_path)
+
+    # Reproject raster data if the source CRS differs from target CRS
+    src_crs = profile.get("crs")
+    dst_crs = CRS.from_user_input(target_crs)
+    if src_crs is not None and CRS.from_user_input(src_crs) != dst_crs:
+        with rasterio.open(raster_path) as src:
+            transform, width, height = calculate_default_transform(
+                src.crs,
+                dst_crs,
+                src.width,
+                src.height,
+                *src.bounds,
+            )
+        count = data.shape[0] if data.ndim == 3 else 1
+        src_3d = data if data.ndim == 3 else data[np.newaxis, ...]
+        dst_3d = np.empty((count, height, width), dtype=data.dtype)
+        warp_reproject(
+            source=src_3d,
+            destination=dst_3d,
+            src_transform=profile["transform"],
+            src_crs=src_crs,
+            dst_transform=transform,
+            dst_crs=dst_crs,
+            resampling=Resampling.bilinear,
+        )
+        # Restore original dimensionality (2D or 3D)
+        data = dst_3d if data.ndim == 3 else dst_3d[0]
+        profile = {
+            **profile,
+            "crs": dst_crs,
+            "transform": transform,
+            "width": width,
+            "height": height,
+        }
+        logger.debug("Raster reprojected from %s to %s", src_crs, target_crs)
 
     # Read fire perimeter and reproject to target CRS
     perimeter = read_vector(fire_perimeter_path)

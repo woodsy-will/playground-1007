@@ -10,7 +10,7 @@ management.
 ## Monorepo Structure
 
 ```
-resume-spatial-portfoli0/
+sierra-spatial-portfolio/
 ├── shared/                         # Cross-project shared code
 │   ├── utils/
 │   │   ├── allometry.py            # Pillsbury & Kirkley allometric equations
