@@ -1,4 +1,4 @@
-"""Exhaustive tests for the SQL validator — the critical safety component.
+"""Exhaustive tests for the SQL validator -- the critical safety component.
 
 Covers valid queries, blocked operations, injection attempts,
 case-insensitive detection, spatial function whitelist enforcement,
