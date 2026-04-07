@@ -61,7 +61,6 @@ def run_pipeline(config_path: str | Path) -> dict[str, Any]:
     )
     from projects.p4_habitat_suitability.src.projection import (
         project_suitability,
-        threshold_suitability,
     )
 
     config = load_config(config_path)
@@ -104,13 +103,19 @@ def run_pipeline(config_path: str | Path) -> dict[str, Any]:
     models: dict[str, Any] = {}
     algorithms = config.get("modeling", {}).get("algorithms", ["maxent", "random_forest"])
 
+    def _maxent_fn(x_tr: np.ndarray, y_tr: np.ndarray) -> Any:
+        return train_maxent(x_tr, y_tr, config)
+
+    def _rf_fn(x_tr: np.ndarray, y_tr: np.ndarray) -> Any:
+        return train_random_forest(x_tr, y_tr, config)
+
     cv_metrics: dict[str, Any] = {}
     for algo in algorithms:
         if algo == "maxent":
-            model_fn = lambda Xt, yt: train_maxent(Xt, yt, config)  # noqa: N803
+            model_fn = _maxent_fn
             models["maxent"] = train_maxent(X, y, config)
         else:
-            model_fn = lambda Xt, yt: train_random_forest(Xt, yt, config)  # noqa: N803
+            model_fn = _rf_fn
             models["random_forest"] = train_random_forest(X, y, config)
 
         cv_result = spatial_block_cv(X, y, coords, model_fn, config)
