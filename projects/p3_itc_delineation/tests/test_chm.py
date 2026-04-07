@@ -5,7 +5,6 @@ from __future__ import annotations
 from pathlib import Path
 
 import numpy as np
-import pytest
 
 from shared.utils.io import read_raster, write_raster
 
@@ -17,8 +16,6 @@ class TestGenerateCHM:
         """CHM generation from pre-built DSM and DTM produces a valid raster."""
         from projects.p3_itc_delineation.src.chm import generate_chm
 
-        # Use synthetic CHM as a stand-in DSM (heights above ground)
-        # Create a fake DSM = DTM + CHM
         chm_data, chm_profile = read_raster(chm_path)
         dtm_data, dtm_profile = read_raster(dtm_path)
 

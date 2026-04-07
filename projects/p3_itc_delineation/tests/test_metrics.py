@@ -71,3 +71,31 @@ class TestExtractTreeMetrics:
         result = extract_tree_metrics(crowns_gdf, chm_path, default_config)
         if len(result) > 0:
             assert np.all(result["stem_volume_cuft"].values >= 0)
+
+
+class TestAllometryValues:
+    """Verify allometric equations produce mathematically correct values."""
+
+    def test_dbh_from_known_crown_diameter(self):
+        """Hand-computed: crown_diameter 6m \u2192 6*3.28084=19.685ft
+        DBH = (19.685 - 3.0) / 0.25 = 66.74 inches."""
+        from shared.utils.allometry import dbh_from_crown_diameter
+
+        dbh = dbh_from_crown_diameter(np.array([6.0]))
+        expected = (6.0 * 3.28084 - 3.0) / 0.25
+        np.testing.assert_allclose(dbh[0], expected, atol=0.01)
+
+    def test_volume_from_known_dbh_height(self):
+        """Hand-computed: DBH=20in, height=80ft
+        volume = 0.002 * 20^2 * 80 = 64.0 cuft."""
+        from shared.utils.allometry import stem_volume_cuft
+
+        vol = stem_volume_cuft(np.array([20.0]), np.array([80.0]))
+        np.testing.assert_allclose(vol[0], 64.0, atol=0.01)
+
+    def test_basal_area_from_known_dbh(self):
+        """BA = 0.005454 * DBH^2. DBH=10in \u2192 BA = 0.5454 sqft."""
+        from shared.utils.allometry import basal_area_sqft
+
+        ba = basal_area_sqft(np.array([10.0]))
+        np.testing.assert_allclose(ba[0], 0.5454, atol=0.001)

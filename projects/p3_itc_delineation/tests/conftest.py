@@ -15,7 +15,6 @@ import pytest
 from shapely.geometry import Point
 
 from shared.data.generate_synthetic import (
-    AOI_BOUNDS,
     generate_synthetic_chm,
     generate_synthetic_cruise_plots,
     generate_synthetic_dtm,
