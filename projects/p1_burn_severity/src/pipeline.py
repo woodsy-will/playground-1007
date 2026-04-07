@@ -50,8 +50,8 @@ def run_pipeline(config_path: str | Path) -> dict[str, Any]:
     Returns
     -------
     dict[str, Any]
-        ``output_paths`` — dict of written file paths.
-        ``summary`` — dict with pixel counts per severity class and
+        ``output_paths`` -- dict of written file paths.
+        ``summary`` -- dict with pixel counts per severity class and
         recovery model parameters.
     """
     config = load_config(config_path)
@@ -72,7 +72,7 @@ def run_pipeline(config_path: str | Path) -> dict[str, Any]:
     post_swir_path = imagery_dir / "post_swir.tif"
 
     if not pre_nir_path.exists():
-        logger.info("Imagery not found — generating synthetic data")
+        logger.info("Imagery not found -- generating synthetic data")
         from shared.data.generate_synthetic import generate_synthetic_burn_rasters
 
         synth = generate_synthetic_burn_rasters(imagery_dir)
