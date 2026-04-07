@@ -18,9 +18,9 @@ logger = get_logger("p1.dashboard")
 
 try:
     import dash  # type: ignore[import-untyped]
-    from dash import dcc, html  # type: ignore[import-untyped]
     import plotly.express as px  # type: ignore[import-untyped]
     import plotly.graph_objects as go  # type: ignore[import-untyped]
+    from dash import dcc, html  # type: ignore[import-untyped]
 
     _HAS_DASH = True
 except ImportError:
@@ -118,7 +118,7 @@ def create_app(
     severity_path: str | Path,
     recovery_df: pd.DataFrame,
     config: dict[str, Any],
-) -> "dash.Dash":
+) -> dash.Dash:
     """Create a Plotly Dash application for burn severity exploration.
 
     Parameters

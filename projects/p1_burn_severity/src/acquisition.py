@@ -6,7 +6,6 @@ Sentinel-2 scenes and downloads NIR (B8A), SWIR (B12), and SCL bands.
 
 from __future__ import annotations
 
-import logging
 from pathlib import Path
 from typing import Any
 
