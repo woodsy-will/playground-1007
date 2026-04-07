@@ -1,4 +1,4 @@
-"""Tests for burn severity computation — NBR, dNBR, classification, RBR."""
+"""Tests for burn severity computation -- NBR, dNBR, classification, RBR."""
 
 from __future__ import annotations
 
@@ -85,11 +85,11 @@ class TestClassifySeverity:
         # Exact boundary values: use threshold midpoints
         thresholds = config["processing"]["severity_thresholds"]
         dnbr = np.array([
-            thresholds["unburned"][0],       # -0.1 → unburned
-            thresholds["unburned"][1],        # 0.1 → low (boundary)
-            thresholds["low"][1],             # 0.27 → moderate_low
-            thresholds["moderate_low"][1],    # 0.44 → moderate_high
-            thresholds["moderate_high"][1],   # 0.66 → high
+            thresholds["unburned"][0],       # -0.1 -> unburned
+            thresholds["unburned"][1],        # 0.1 -> low (boundary)
+            thresholds["low"][1],             # 0.27 -> moderate_low
+            thresholds["moderate_low"][1],    # 0.44 -> moderate_high
+            thresholds["moderate_high"][1],   # 0.66 -> high
         ])
         classes = classify_severity(dnbr, config)
         assert classes[0] == 0  # unburned
