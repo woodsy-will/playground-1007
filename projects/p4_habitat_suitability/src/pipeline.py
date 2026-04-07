@@ -84,7 +84,7 @@ def run_pipeline(config_path: str | Path) -> dict[str, Any]:
 
     # --- 4. Create presence/absence matrix ---
     logger.info("Step 4: Creating PA matrix")
-    X, y = create_pa_matrix(occ_thinned, bg_gdf, stack, profile, band_names)
+    X, y = create_pa_matrix(occ_thinned, bg_gdf, stack, profile, band_names)  # noqa: N806
 
     # Coordinates for spatial CV
     import numpy as np
@@ -107,10 +107,10 @@ def run_pipeline(config_path: str | Path) -> dict[str, Any]:
     cv_metrics: dict[str, Any] = {}
     for algo in algorithms:
         if algo == "maxent":
-            model_fn = lambda Xt, yt: train_maxent(Xt, yt, config)
+            model_fn = lambda Xt, yt: train_maxent(Xt, yt, config)  # noqa: N803
             models["maxent"] = train_maxent(X, y, config)
         else:
-            model_fn = lambda Xt, yt: train_random_forest(Xt, yt, config)
+            model_fn = lambda Xt, yt: train_random_forest(Xt, yt, config)  # noqa: N803
             models["random_forest"] = train_random_forest(X, y, config)
 
         cv_result = spatial_block_cv(X, y, coords, model_fn, config)

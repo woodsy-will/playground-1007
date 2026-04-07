@@ -134,7 +134,7 @@ def create_pa_matrix(
 
     combined = pd.concat([pres_df, bg_df], ignore_index=True).dropna()
 
-    X = combined[band_names].values.astype(np.float32)
+    X = combined[band_names].values.astype(np.float32)  # noqa: N806
     y = combined["presence"].values.astype(np.int32)
 
     logger.info(

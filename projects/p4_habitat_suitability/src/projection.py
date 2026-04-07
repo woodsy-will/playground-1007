@@ -50,9 +50,9 @@ def project_suitability(
     probs = np.full(flat.shape[0], np.nan, dtype=np.float32)
 
     if valid_mask.any():
-        X_valid = flat[valid_mask].astype(np.float32)
+        X_valid = flat[valid_mask].astype(np.float32)  # noqa: N806
         if hasattr(model, "scaler_"):
-            X_valid = model.scaler_.transform(X_valid)
+            X_valid = model.scaler_.transform(X_valid)  # noqa: N806
         probs[valid_mask] = model.predict_proba(X_valid)[:, 1].astype(np.float32)
 
     suitability = probs.reshape(height, width)

@@ -20,7 +20,7 @@ class TestTrainModels:
         gdf = load_occurrences(default_config)
         stack, profile, band_names = build_predictor_stack(default_config)
         bg = generate_background_points(gdf, stack, profile, default_config, n_points=100)
-        X, y = create_pa_matrix(gdf, bg, stack, profile, band_names)
+        X, y = create_pa_matrix(gdf, bg, stack, profile, band_names)  # noqa: N806
 
         model = train_maxent(X, y, default_config)
         assert hasattr(model, "predict_proba")
@@ -39,7 +39,7 @@ class TestTrainModels:
         gdf = load_occurrences(default_config)
         stack, profile, band_names = build_predictor_stack(default_config)
         bg = generate_background_points(gdf, stack, profile, default_config, n_points=100)
-        X, y = create_pa_matrix(gdf, bg, stack, profile, band_names)
+        X, y = create_pa_matrix(gdf, bg, stack, profile, band_names)  # noqa: N806
 
         model = train_random_forest(X, y, default_config)
         assert hasattr(model, "predict_proba")
@@ -68,7 +68,7 @@ class TestSpatialBlockCV:
         gdf = load_occurrences(default_config)
         stack, profile, band_names = build_predictor_stack(default_config)
         bg = generate_background_points(gdf, stack, profile, default_config, n_points=200)
-        X, y = create_pa_matrix(gdf, bg, stack, profile, band_names)
+        X, y = create_pa_matrix(gdf, bg, stack, profile, band_names)  # noqa: N806
 
         # Build coords array
         pres_df = extract_values_at_points(stack, profile, gdf, band_names)
@@ -80,7 +80,7 @@ class TestSpatialBlockCV:
 
         result = spatial_block_cv(
             X, y, coords,
-            model_fn=lambda Xt, yt: train_random_forest(Xt, yt),
+            model_fn=lambda Xt, yt: train_random_forest(Xt, yt),  # noqa: N803
             config=default_config,
         )
 

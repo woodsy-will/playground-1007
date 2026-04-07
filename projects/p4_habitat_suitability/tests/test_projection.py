@@ -21,7 +21,7 @@ class TestProjectSuitability:
         gdf = load_occurrences(default_config)
         stack, profile, band_names = build_predictor_stack(default_config)
         bg = generate_background_points(gdf, stack, profile, default_config, n_points=100)
-        X, y = create_pa_matrix(gdf, bg, stack, profile, band_names)
+        X, y = create_pa_matrix(gdf, bg, stack, profile, band_names)  # noqa: N806
         model = train_random_forest(X, y, default_config)
 
         suitability, out_profile = project_suitability(model, stack, profile)
@@ -42,7 +42,7 @@ class TestProjectSuitability:
         gdf = load_occurrences(default_config)
         stack, profile, band_names = build_predictor_stack(default_config)
         bg = generate_background_points(gdf, stack, profile, default_config, n_points=100)
-        X, y = create_pa_matrix(gdf, bg, stack, profile, band_names)
+        X, y = create_pa_matrix(gdf, bg, stack, profile, band_names)  # noqa: N806
         model = train_random_forest(X, y, default_config)
 
         suitability, _ = project_suitability(model, stack, profile)
