@@ -108,7 +108,7 @@ resume-spatial-portfoli0/
      │  harvest_units, streams, roads, │
      │  severity maps, tree inventory, │
      │  suitability surfaces           │
-     └──────────────┬──────────────────┘
+     └────────────────┬────────────────┘
                     │
                     ▼
          ┌────────────────────────┐
@@ -147,7 +147,7 @@ execution against the GeoPackage.
 ## Technology Stack
 
 | Layer | Technology |
-|-------|-----------|
+|-------|------------|
 | Language | Python ≥ 3.11 |
 | CRS | EPSG:3310 (California Albers NAD 83) |
 | Raster I/O | rasterio, rioxarray |
