@@ -1,0 +1,93 @@
+examples:
+  - question: "Show all harvest units within 200 feet of Class I streams"
+    sql: >-
+      SELECT h.*
+      FROM harvest_units h, streams s
+      WHERE s.stream_class = 'I'
+        AND ST_Intersects(h.geometry, ST_Buffer(s.geometry, 60.96))
+
+  - question: "What is the total acreage of clearcut harvest units?"
+    sql: >-
+      SELECT SUM(acres) AS total_clearcut_acres
+      FROM harvest_units
+      WHERE prescription = 'clearcut'
+
+  - question: "Find sensitive habitats that overlap with any harvest unit"
+    sql: >-
+      SELECT sh.*
+      FROM sensitive_habitats sh, harvest_units h
+      WHERE ST_Intersects(sh.geometry, h.geometry)
+
+  - question: "List all streams within 100 meters of roads"
+    sql: >-
+      SELECT s.*
+      FROM streams s, roads r
+      WHERE ST_Intersects(s.geometry, ST_Buffer(r.geometry, 100))
+
+  - question: "What is the area in acres of each harvest unit?"
+    sql: >-
+      SELECT unit_name, acres, ST_Area(geometry) AS area_sq_meters
+      FROM harvest_units
+
+  - question: "Show harvest units that contain sensitive habitat"
+    sql: >-
+      SELECT h.*
+      FROM harvest_units h, sensitive_habitats sh
+      WHERE ST_Contains(h.geometry, sh.geometry)
+
+  - question: "Find all roads within harvest unit boundaries"
+    sql: >-
+      SELECT r.*
+      FROM roads r, harvest_units h
+      WHERE ST_Within(r.geometry, h.geometry)
+
+  - question: "How many harvest units are prescribed for selection cutting?"
+    sql: >-
+      SELECT COUNT(*) AS selection_count
+      FROM harvest_units
+      WHERE prescription = 'selection'
+
+  - question: "Calculate total stream length by stream class"
+    sql: >-
+      SELECT stream_class, SUM(ST_Length(geometry)) AS total_length_m
+      FROM streams
+      GROUP BY stream_class
+
+  - question: "Which ownership parcels contain harvest units?"
+    sql: >-
+      SELECT DISTINCT op.owner, op.ownership_type
+      FROM ownership_parcels op, harvest_units h
+      WHERE ST_Intersects(op.geometry, h.geometry)
+
+  - question: "Find LiDAR tiles that cover sensitive habitat areas"
+    sql: >-
+      SELECT lt.*
+      FROM lidar_tile_index lt, sensitive_habitats sh
+      WHERE ST_Intersects(lt.geometry, sh.geometry)
+
+  - question: "Show harvest units larger than 40 acres with their prescriptions"
+    sql: >-
+      SELECT unit_name, acres, prescription
+      FROM harvest_units
+      WHERE acres > 40
+
+  - question: "Buffer all Class I and II streams by 150 feet and find overlapping units"
+    sql: >-
+      SELECT h.unit_name, h.prescription, s.stream_class
+      FROM harvest_units h, streams s
+      WHERE s.stream_class IN ('I', 'II')
+        AND ST_Intersects(h.geometry, ST_Buffer(s.geometry, 45.72))
+
+  - question: "What is the total length of roads on federal land?"
+    sql: >-
+      SELECT SUM(ST_Length(r.geometry)) AS total_road_length_m
+      FROM roads r, ownership_parcels op
+      WHERE op.ownership_type = 'federal'
+        AND ST_Intersects(r.geometry, op.geometry)
+
+  - question: "List all listed species habitats within 500 meters of roads"
+    sql: >-
+      SELECT sh.species, sh.status
+      FROM sensitive_habitats sh, roads r
+      WHERE sh.status = 'listed'
+        AND ST_Intersects(sh.geometry, ST_Buffer(r.geometry, 500))

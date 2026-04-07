@@ -1,0 +1,44 @@
+layers:
+  harvest_units:
+    description: "Proposed timber harvest units with prescriptions"
+    columns:
+      unit_id: {type: integer, description: "Unique unit identifier"}
+      unit_name: {type: text, description: "Human-readable unit name"}
+      acres: {type: real, description: "Unit area in acres"}
+      prescription: {type: text, description: "Silvicultural prescription (clearcut, selection, shelterwood)"}
+      geometry: {type: polygon, srid: 3310}
+  streams:
+    description: "Classified watercourses (Class I-IV per CA Forest Practice Rules)"
+    columns:
+      stream_id: {type: integer, description: "Unique stream identifier"}
+      stream_class: {type: text, description: "Stream class (I, II, III, IV)"}
+      name: {type: text, description: "Stream name"}
+      geometry: {type: linestring, srid: 3310}
+  roads:
+    description: "Forest road network"
+    columns:
+      road_id: {type: integer, description: "Unique road identifier"}
+      road_class: {type: text, description: "Road maintenance level"}
+      surface: {type: text, description: "Surface type (paved, gravel, native)"}
+      geometry: {type: linestring, srid: 3310}
+  sensitive_habitats:
+    description: "Known sensitive species habitat areas"
+    columns:
+      habitat_id: {type: integer, description: "Unique habitat identifier"}
+      species: {type: text, description: "Species scientific name"}
+      status: {type: text, description: "Listing status (listed, candidate, sensitive)"}
+      geometry: {type: polygon, srid: 3310}
+  ownership_parcels:
+    description: "Land ownership parcels"
+    columns:
+      parcel_id: {type: integer, description: "Unique parcel identifier"}
+      owner: {type: text, description: "Owner name/agency"}
+      ownership_type: {type: text, description: "Type (federal, state, private, tribal)"}
+      geometry: {type: polygon, srid: 3310}
+  lidar_tile_index:
+    description: "Index of available LiDAR tile footprints"
+    columns:
+      tile_id: {type: text, description: "Tile identifier"}
+      acquisition_date: {type: text, description: "Date of LiDAR acquisition"}
+      point_density: {type: real, description: "Points per square meter"}
+      geometry: {type: polygon, srid: 3310}
