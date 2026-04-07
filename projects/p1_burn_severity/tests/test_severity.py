@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import numpy as np
-import pytest
 
 from projects.p1_burn_severity.src.severity import (
     classify_severity,
@@ -80,6 +79,24 @@ class TestClassifySeverity:
         dnbr = np.random.default_rng(0).uniform(-0.2, 1.0, (10, 10))
         classes = classify_severity(dnbr, config)
         assert classes.dtype == np.uint8
+
+    def test_boundary_values(self, config: dict) -> None:
+        """Verify values at exact threshold boundaries classify correctly."""
+        # Exact boundary values: use threshold midpoints
+        thresholds = config["processing"]["severity_thresholds"]
+        dnbr = np.array([
+            thresholds["unburned"][0],       # -0.1 → unburned
+            thresholds["unburned"][1],        # 0.1 → low (boundary)
+            thresholds["low"][1],             # 0.27 → moderate_low
+            thresholds["moderate_low"][1],    # 0.44 → moderate_high
+            thresholds["moderate_high"][1],   # 0.66 → high
+        ])
+        classes = classify_severity(dnbr, config)
+        assert classes[0] == 0  # unburned
+        assert classes[1] == 1  # low (at boundary)
+        assert classes[2] == 2  # moderate_low
+        assert classes[3] == 3  # moderate_high
+        assert classes[4] == 4  # high
 
     def test_all_classes_present(self, config: dict, synthetic_nir_swir: dict) -> None:
         pre_nbr = compute_nbr(
