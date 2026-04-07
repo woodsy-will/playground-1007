@@ -11,7 +11,6 @@ import json
 from pathlib import Path
 from typing import Any
 
-from shared.utils.config import load_config
 from shared.utils.logging import get_logger
 
 logger = get_logger("p3_ground")

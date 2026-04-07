@@ -42,7 +42,6 @@ def run_pipeline(config_path: str | Path) -> dict[str, Any]:
     from projects.p3_itc_delineation.src.segmentation import segment_crowns
     from projects.p3_itc_delineation.src.treetops import detect_treetops
     from projects.p3_itc_delineation.src.validation import validate_against_cruise
-
     from shared.utils.io import list_files, write_vector
 
     config = load_config(config_path)

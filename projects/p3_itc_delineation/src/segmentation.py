@@ -13,7 +13,6 @@ from typing import Any
 import geopandas as gpd
 import numpy as np
 import rasterio.features
-from scipy.ndimage import label as ndlabel
 from shapely.geometry import shape
 
 from shared.utils.io import read_raster
@@ -106,7 +105,7 @@ def segment_crowns(
         )
 
     logger.info(
-        "Segmented %d crowns (min_area=%.1f m²)",
+        "Segmented %d crowns (min_area=%.1f m\u00b2)",
         len(records),
         min_area,
     )
