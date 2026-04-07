@@ -27,6 +27,13 @@ _COMMENT_PATTERN = re.compile(
 )
 _WHITESPACE_PATTERN = re.compile(r"\s+")
 
+# SQLite-specific dangerous keywords that are ALWAYS blocked regardless
+# of configuration.  These can bypass the SELECT-only check when used as
+# function calls or stand-alone statements.
+_ALWAYS_BLOCKED = frozenset({
+    "PRAGMA", "ATTACH", "DETACH", "VACUUM", "LOAD_EXTENSION",
+})
+
 
 def sanitize_sql(sql: str) -> str:
     """Strip comments and normalize whitespace in a SQL string.
@@ -88,18 +95,25 @@ def validate_sql(
     if not cleaned.upper().lstrip().startswith("SELECT"):
         return False, "SQL must start with SELECT"
 
-    # 2. Check for blocked operations
+    # 2a. Check for always-blocked SQLite keywords (security-critical,
+    #     independent of user config).
+    upper_sql = cleaned.upper()
+    for kw in _ALWAYS_BLOCKED:
+        pattern = rf"\b{re.escape(kw)}\b"
+        if re.search(pattern, upper_sql):
+            return False, f"Blocked keyword detected: {kw}"
+
+    # 2b. Check for config-driven blocked operations
     # Use word-boundary matching to avoid false positives (e.g. "UPDATED" in a
     # column alias should not trip "UPDATE", but we err on the side of caution
-    # for safety — a standalone keyword is blocked).
-    upper_sql = cleaned.upper()
+    # for safety \u2014 a standalone keyword is blocked).
     for op in blocked_ops:
         # Match the blocked keyword as a standalone word
         pattern = rf"\b{re.escape(op)}\b"
         if re.search(pattern, upper_sql):
             return False, f"Blocked operation detected: {op}"
 
-    # 3. Check spatial functions — only whitelisted ones are allowed
+    # 3. Check spatial functions \u2014 only whitelisted ones are allowed
     # Find all function-call patterns that start with ST_
     found_spatial = set(re.findall(r"\b(ST_\w+)\s*\(", cleaned, re.IGNORECASE))
     allowed_upper = {op.upper() for op in allowed_ops if op.upper().startswith("ST_")}

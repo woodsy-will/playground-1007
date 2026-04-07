@@ -64,7 +64,8 @@ def extract_tree_metrics(
                 else:
                     max_heights.append(0.0)
                     mean_heights.append(0.0)
-            except Exception:
+            except (ValueError, IndexError) as exc:
+                logger.warning("Could not extract metrics for crown: %s", exc)
                 max_heights.append(0.0)
                 mean_heights.append(0.0)
 

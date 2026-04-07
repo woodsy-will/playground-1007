@@ -8,7 +8,6 @@ Sources:
 import numpy as np
 from numpy.typing import ArrayLike
 
-
 # Basal area constant: BA (sq ft) = BA_CONSTANT * DBH (inches)^2
 BA_CONSTANT = 0.005454
 

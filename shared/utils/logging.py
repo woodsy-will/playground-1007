@@ -32,9 +32,10 @@ def get_logger(
         Configured logger instance.
     """
     logger = logging.getLogger(name)
+    logger.setLevel(getattr(logging, level.upper(), logging.INFO))
+    logger.propagate = False
 
     if not logger.handlers:
-        logger.setLevel(getattr(logging, level.upper(), logging.INFO))
         handler = logging.StreamHandler(sys.stdout)
         handler.setFormatter(logging.Formatter(fmt))
         logger.addHandler(handler)

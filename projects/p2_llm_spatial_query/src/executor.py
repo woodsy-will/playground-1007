@@ -37,13 +37,16 @@ def load_spatialite(conn: sqlite3.Connection) -> None:
     """
     conn.enable_load_extension(True)
 
-    for lib in ("mod_spatialite", "libspatialite"):
-        try:
-            conn.load_extension(lib)
-            logger.debug("Loaded SpatiaLite via %s", lib)
-            return
-        except sqlite3.OperationalError:
-            continue
+    try:
+        for lib in ("mod_spatialite", "libspatialite"):
+            try:
+                conn.load_extension(lib)
+                logger.debug("Loaded SpatiaLite via %s", lib)
+                return
+            except sqlite3.OperationalError:
+                continue
+    finally:
+        conn.enable_load_extension(False)
 
     raise RuntimeError(
         "Could not load SpatiaLite extension. "
@@ -97,7 +100,7 @@ def execute_query(
             load_spatialite(conn)
         except RuntimeError:
             logger.warning(
-                "SpatiaLite not available — spatial functions will not work"
+                "SpatiaLite not available \u2014 spatial functions will not work"
             )
 
         logger.info("Executing SQL: %s", sql)
@@ -114,7 +117,7 @@ def execute_query(
             logger.info("Returning GeoDataFrame with %d rows", len(gdf))
             return gdf
         except Exception:
-            logger.warning("Could not parse geometry column — returning DataFrame")
+            logger.warning("Could not parse geometry column \u2014 returning DataFrame")
 
     logger.info("Returning DataFrame with %d rows", len(df))
     return df
