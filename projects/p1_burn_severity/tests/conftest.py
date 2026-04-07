@@ -15,7 +15,6 @@ import pytest
 from shared.utils.config import load_config
 from shared.utils.io import make_profile, write_raster
 
-
 # ---------------------------------------------------------------------------
 # Synthetic raster dimensions
 # ---------------------------------------------------------------------------

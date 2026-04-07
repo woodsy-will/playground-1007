@@ -12,21 +12,19 @@ from typing import Any
 
 import numpy as np
 
-from shared.utils.config import load_config
-from shared.utils.io import read_raster, write_raster, make_profile
-from shared.utils.logging import get_logger
-
+from projects.p1_burn_severity.src.recovery import (
+    build_recovery_timeseries,
+    fit_recovery_model,
+)
 from projects.p1_burn_severity.src.severity import (
     classify_severity,
     compute_dnbr,
     compute_nbr,
     compute_rbr,
 )
-from projects.p1_burn_severity.src.recovery import (
-    build_recovery_timeseries,
-    compute_vegetation_index,
-    fit_recovery_model,
-)
+from shared.utils.config import load_config
+from shared.utils.io import read_raster, write_raster
+from shared.utils.logging import get_logger
 
 logger = get_logger("p1.pipeline")
 

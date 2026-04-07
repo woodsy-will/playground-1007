@@ -34,14 +34,14 @@ class TestRunPipeline:
         config["data"]["output_dir"] = str(tmp_path / "data" / "processed")
 
         # Run pipeline components directly (avoids re-loading config from disk)
+        from projects.p1_burn_severity.src.recovery import (
+            build_recovery_timeseries,
+            fit_recovery_model,
+        )
         from projects.p1_burn_severity.src.severity import (
             classify_severity,
             compute_dnbr,
             compute_nbr,
-        )
-        from projects.p1_burn_severity.src.recovery import (
-            build_recovery_timeseries,
-            fit_recovery_model,
         )
         from shared.utils.io import write_raster
 
