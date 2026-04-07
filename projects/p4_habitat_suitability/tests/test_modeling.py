@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import numpy as np
+import pytest
 
 
 class TestTrainModels:
@@ -89,3 +90,24 @@ class TestSpatialBlockCV:
         # AUC should be between 0 and 1 (or NaN if insufficient data)
         if not np.isnan(result["auc_mean"]):
             assert 0.0 <= result["auc_mean"] <= 1.0
+
+
+class TestPipelineAlgorithmDispatch:
+    """Verify the pipeline rejects unknown algorithm names."""
+
+    def test_unknown_algorithm_raises(self, default_config: dict, tmp_path):
+
+        import yaml
+
+        from projects.p4_habitat_suitability.src.pipeline import run_pipeline
+
+        # Write the test config to a temp YAML file with an invalid algo
+        cfg = dict(default_config)
+        cfg["modeling"] = dict(cfg["modeling"])
+        cfg["modeling"]["algorithms"] = ["bogus_model"]
+
+        tmp_cfg = tmp_path / "bad_algo.yaml"
+        tmp_cfg.write_text(yaml.dump(cfg))
+
+        with pytest.raises(ValueError, match="Unknown algorithm"):
+            run_pipeline(str(tmp_cfg))

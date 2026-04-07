@@ -114,9 +114,11 @@ def run_pipeline(config_path: str | Path) -> dict[str, Any]:
         if algo == "maxent":
             model_fn = _maxent_fn
             models["maxent"] = train_maxent(X, y, config)
-        else:
+        elif algo == "random_forest":
             model_fn = _rf_fn
             models["random_forest"] = train_random_forest(X, y, config)
+        else:
+            raise ValueError(f"Unknown algorithm: {algo}")
 
         cv_result = spatial_block_cv(X, y, coords, model_fn, config)
         cv_metrics[algo] = cv_result
@@ -153,7 +155,7 @@ def run_pipeline(config_path: str | Path) -> dict[str, Any]:
         change_df = None
 
     results: dict[str, Any] = {
-        "occurrences_raw": len(occ_gdf),
+        "occurrences_raw_count": len(occ_gdf),
         "occurrences_thinned": len(occ_thinned),
         "predictor_stack_shape": stack.shape,
         "band_names": band_names,

@@ -5,7 +5,6 @@ from __future__ import annotations
 from pathlib import Path
 
 import geopandas as gpd
-import numpy as np
 import pandas as pd
 import pytest
 from shapely.geometry import Point
