@@ -1,0 +1,46 @@
+name: CI
+
+on:
+  push:
+    branches: [main, develop, "feature/**"]
+  pull_request:
+    branches: [main, develop]
+
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install ruff
+        run: pip install ruff
+      - name: Lint with ruff
+        run: ruff check . --config pyproject.toml
+
+  test:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        shell: bash -l {0}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Miniconda
+        uses: conda-incubator/setup-miniconda@v3
+        with:
+          activate-environment: sierra-spatial
+          environment-file: environment.yml
+          python-version: "3.11"
+          auto-activate-base: false
+
+      - name: Install project in dev mode
+        run: pip install -e ".[dev]" || pip install -e .
+
+      - name: Run tests
+        run: |
+          pytest projects/p1_burn_severity/tests/ -v --tb=short -x
+          pytest projects/p2_llm_spatial_query/tests/ -v --tb=short -x
+          pytest projects/p3_itc_delineation/tests/ -v --tb=short -x
+          pytest projects/p4_habitat_suitability/tests/ -v --tb=short -x
