@@ -29,7 +29,7 @@ def run_pipeline(config_path: str | Path) -> dict[str, Any]:
     -------
     dict
         Dictionary with keys:
-        - ``occurrences_raw``: path to raw occurrence file
+        - ``occurrences_raw_count``: number of raw occurrence records
         - ``occurrences_thinned``: count of thinned records
         - ``predictor_stack_shape``: tuple of stack dimensions
         - ``band_names``: list of predictor names
