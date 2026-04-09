@@ -7,6 +7,7 @@ from pathlib import Path
 import geopandas as gpd
 import numpy as np
 import pytest
+from shapely.geometry import box
 
 
 class TestExtractTreeMetrics:
@@ -71,6 +72,60 @@ class TestExtractTreeMetrics:
         result = extract_tree_metrics(crowns_gdf, chm_path, default_config)
         if len(result) > 0:
             assert np.all(result["stem_volume_cuft"].values >= 0)
+
+    def test_quality_flag_column_exists(
+        self, crowns_gdf: gpd.GeoDataFrame, chm_path: Path, default_config: dict
+    ):
+        """Output must contain a quality_flag column with 0 for valid data."""
+        from projects.p3_itc_delineation.src.metrics import extract_tree_metrics
+
+        result = extract_tree_metrics(crowns_gdf, chm_path, default_config)
+        assert "quality_flag" in result.columns
+        if len(result) > 0:
+            assert np.all(result["quality_flag"].values == 0)
+
+
+class TestQualityFlags:
+    """Verify quality flag behaviour for invalid and edge-case inputs."""
+
+    def test_invalid_crown_polygon(self, chm_path: Path, default_config: dict):
+        """A polygon outside the CHM extent should get quality_flag=1."""
+        from projects.p3_itc_delineation.src.metrics import extract_tree_metrics
+
+        # Create a crown polygon far outside the CHM extent
+        far_away = box(999_999, 999_999, 1_000_010, 1_000_010)
+        gdf = gpd.GeoDataFrame(
+            {
+                "tree_id": [1],
+                "crown_area_m2": [100.0],
+                "crown_diameter_m": [11.28],
+            },
+            geometry=[far_away],
+            crs="EPSG:3310",
+        )
+
+        result = extract_tree_metrics(gdf, chm_path, default_config)
+        assert isinstance(result, gpd.GeoDataFrame)
+        assert result["quality_flag"].iloc[0] == 1
+        assert result["max_height_m"].iloc[0] == 0.0
+        assert result["mean_height_m"].iloc[0] == 0.0
+
+    def test_empty_geodataframe(self, chm_path: Path, default_config: dict):
+        """An empty GeoDataFrame should return empty output with all columns."""
+        from projects.p3_itc_delineation.src.metrics import extract_tree_metrics
+
+        empty_gdf = gpd.GeoDataFrame(
+            {"tree_id": [], "crown_area_m2": [], "crown_diameter_m": []},
+            geometry=[],
+            crs="EPSG:3310",
+        )
+
+        result = extract_tree_metrics(empty_gdf, chm_path, default_config)
+        assert isinstance(result, gpd.GeoDataFrame)
+        assert len(result) == 0
+        for col in ("max_height_m", "mean_height_m", "quality_flag", "dbh_inches",
+                     "stem_volume_cuft"):
+            assert col in result.columns
 
 
 class TestAllometryValues:
