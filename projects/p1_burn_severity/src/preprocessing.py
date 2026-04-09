@@ -77,7 +77,12 @@ def reproject_and_clip(
     fire_perimeter_path: str | Path,
     config: dict[str, Any],
 ) -> tuple[np.ndarray, dict]:
-    """Reproject a raster to EPSG:3310 and clip to a fire perimeter.
+    """Reproject a raster to the target CRS (if needed) and clip to a fire perimeter.
+
+    When the source raster CRS matches the target, only clipping is performed.
+    The resampling method is configurable via ``processing.resampling``
+    (default: ``bilinear`` for continuous data; use ``nearest`` for
+    categorical rasters like SCL).
 
     Parameters
     ----------
@@ -86,14 +91,18 @@ def reproject_and_clip(
     fire_perimeter_path : str or Path
         Path to fire perimeter vector (GeoPackage / Shapefile).
     config : dict
-        Project configuration (reads ``processing.crs``).
+        Project configuration.  Reads ``processing.crs`` (default
+        EPSG:3310) and ``processing.resampling`` (default ``bilinear``).
 
     Returns
     -------
     tuple[np.ndarray, dict]
         Clipped raster array and updated rasterio profile.
     """
-    target_crs = config.get("processing", {}).get("crs", str(DEFAULT_CRS))
+    proc = config.get("processing", {})
+    target_crs = proc.get("crs", str(DEFAULT_CRS))
+    resample_name = proc.get("resampling", "bilinear")
+    resampling = getattr(Resampling, resample_name, Resampling.bilinear)
 
     # Read the raster from disk (need file path for warp metadata)
     raster_path = Path(raster_path)
@@ -102,6 +111,8 @@ def reproject_and_clip(
     # Reproject raster data if the source CRS differs from target CRS
     src_crs = profile.get("crs")
     dst_crs = CRS.from_user_input(target_crs)
+    did_reproject = False
+
     if src_crs is not None and CRS.from_user_input(src_crs) != dst_crs:
         with rasterio.open(raster_path) as src:
             transform, width, height = calculate_default_transform(
@@ -121,7 +132,7 @@ def reproject_and_clip(
             src_crs=src_crs,
             dst_transform=transform,
             dst_crs=dst_crs,
-            resampling=Resampling.bilinear,
+            resampling=resampling,
         )
         # Restore original dimensionality (2D or 3D)
         data = dst_3d if data.ndim == 3 else dst_3d[0]
@@ -132,7 +143,7 @@ def reproject_and_clip(
             "width": width,
             "height": height,
         }
-        logger.debug("Raster reprojected from %s to %s", src_crs, target_crs)
+        did_reproject = True
 
     # Read fire perimeter and reproject to target CRS
     perimeter = read_vector(fire_perimeter_path)
@@ -142,9 +153,18 @@ def reproject_and_clip(
     # Clip to perimeter bounds
     clipped, clip_profile = clip_raster_to_bounds(data, profile, bounds)
 
-    logger.info(
-        "Reprojected to %s and clipped to perimeter bounds %s",
-        target_crs,
-        bounds,
-    )
+    if did_reproject:
+        logger.info(
+            "Reprojected from %s to %s (%s) and clipped to bounds %s",
+            src_crs,
+            target_crs,
+            resample_name,
+            bounds,
+        )
+    else:
+        logger.info(
+            "CRS already %s \u2014 clipped to perimeter bounds %s",
+            target_crs,
+            bounds,
+        )
     return clipped, clip_profile
