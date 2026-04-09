@@ -3,12 +3,14 @@
 from __future__ import annotations
 
 import numpy as np
+import pytest
 
 
 class TestProjectSuitability:
     """Verify suitability projection produces valid raster output."""
 
     def test_projection_shape_matches_stack(self, default_config: dict):
+        pytest.importorskip("sklearn")
         from projects.p4_habitat_suitability.src.background import (
             create_pa_matrix,
             generate_background_points,
@@ -30,6 +32,7 @@ class TestProjectSuitability:
         assert out_profile["count"] == 1
 
     def test_projection_values_in_0_1(self, default_config: dict):
+        pytest.importorskip("sklearn")
         from projects.p4_habitat_suitability.src.background import (
             create_pa_matrix,
             generate_background_points,
@@ -83,6 +86,7 @@ class TestEnsembleProject:
 
     def _make_model_and_metrics(self, default_config):
         """Helper: train two models and get CV metrics."""
+        pytest.importorskip("sklearn")
         from projects.p4_habitat_suitability.src.background import (
             create_pa_matrix,
             generate_background_points,
@@ -112,6 +116,7 @@ class TestEnsembleProject:
         return models, cv_metrics, stack, profile
 
     def test_ensemble_shape_matches_stack(self, default_config: dict):
+        pytest.importorskip("sklearn")
         from projects.p4_habitat_suitability.src.projection import ensemble_project
 
         models, cv_metrics, stack, profile = self._make_model_and_metrics(
@@ -126,6 +131,7 @@ class TestEnsembleProject:
         assert out_profile["count"] == 1
 
     def test_ensemble_values_in_0_1(self, default_config: dict):
+        pytest.importorskip("sklearn")
         from projects.p4_habitat_suitability.src.projection import ensemble_project
 
         models, cv_metrics, stack, profile = self._make_model_and_metrics(
@@ -139,6 +145,7 @@ class TestEnsembleProject:
         assert valid.max() <= 1.0
 
     def test_weights_sum_to_one(self, default_config: dict):
+        pytest.importorskip("sklearn")
         from projects.p4_habitat_suitability.src.projection import ensemble_project
 
         models, cv_metrics, stack, profile = self._make_model_and_metrics(
@@ -152,6 +159,7 @@ class TestEnsembleProject:
 
     def test_weights_reflect_auc(self, default_config: dict):
         """Model with higher AUC should get higher weight."""
+        pytest.importorskip("sklearn")
         from projects.p4_habitat_suitability.src.projection import ensemble_project
 
         models, cv_metrics, stack, profile = self._make_model_and_metrics(
@@ -164,6 +172,7 @@ class TestEnsembleProject:
 
     def test_single_model_degenerates(self, default_config: dict):
         """Ensemble with one model equals that model's projection."""
+        pytest.importorskip("sklearn")
         from projects.p4_habitat_suitability.src.projection import (
             ensemble_project,
             project_suitability,
@@ -189,6 +198,7 @@ class TestEnsembleProject:
         np.testing.assert_allclose(ensemble[valid], direct[valid], atol=1e-6)
 
     def test_uncertainty_non_negative(self, default_config: dict):
+        pytest.importorskip("sklearn")
         from projects.p4_habitat_suitability.src.projection import ensemble_project
 
         models, cv_metrics, stack, profile = self._make_model_and_metrics(
@@ -210,6 +220,7 @@ class TestEnsembleProject:
 
     def test_nan_auc_gets_default_weight(self, default_config: dict):
         """Model with NaN AUC should receive weight 0.5."""
+        pytest.importorskip("sklearn")
         from projects.p4_habitat_suitability.src.projection import ensemble_project
 
         models, _, stack, profile = self._make_model_and_metrics(

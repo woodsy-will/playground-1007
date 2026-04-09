@@ -6,7 +6,9 @@ segmentation, and metric extraction using synthetic fixtures.
 
 from __future__ import annotations
 
+import sys
 from pathlib import Path
+from unittest.mock import MagicMock, patch
 
 import geopandas as gpd
 import pytest
@@ -121,3 +123,74 @@ class TestFullDelineationChain:
         # Heights should be within reasonable range for synthetic data
         assert (metrics["max_height_m"] >= 0).all()
         assert (metrics["mean_height_m"] >= 0).all()
+
+
+class TestPipelineMocked:
+    """Test the pipeline with heavy dependencies (pdal) mocked via sys.modules."""
+
+    def test_full_pipeline_with_mocked_pdal(
+        self, chm_path: Path, sample_treetops: gpd.GeoDataFrame, default_config: dict
+    ) -> None:
+        """Chain detect_treetops -> segment_crowns -> extract_tree_metrics -> validate.
+
+        pdal is mocked out; the functions that actually run (treetops,
+        segmentation, metrics, validation) use real code with synthetic data.
+        """
+        pytest.importorskip("skimage")
+
+        mock_pdal = MagicMock()
+        with patch.dict(sys.modules, {"pdal": mock_pdal}):
+            from projects.p3_itc_delineation.src.metrics import extract_tree_metrics
+            from projects.p3_itc_delineation.src.segmentation import segment_crowns
+            from projects.p3_itc_delineation.src.treetops import detect_treetops
+            from projects.p3_itc_delineation.src.validation import validate_against_cruise
+
+            # Step 1: Detect treetops
+            treetops = detect_treetops(chm_path, default_config)
+            assert isinstance(treetops, gpd.GeoDataFrame)
+            assert len(treetops) > 0
+            assert "tree_id" in treetops.columns
+            assert "height" in treetops.columns
+
+            # Step 2: Segment crowns
+            crowns = segment_crowns(chm_path, treetops, default_config)
+            assert isinstance(crowns, gpd.GeoDataFrame)
+            assert len(crowns) > 0
+            assert "crown_area_m2" in crowns.columns
+
+            # Step 3: Extract metrics
+            metrics = extract_tree_metrics(crowns, chm_path, default_config)
+            assert isinstance(metrics, gpd.GeoDataFrame)
+            assert len(metrics) > 0
+
+            expected_columns = [
+                "tree_id",
+                "crown_area_m2",
+                "crown_diameter_m",
+                "max_height_m",
+                "mean_height_m",
+                "quality_flag",
+                "dbh_inches",
+                "stem_volume_cuft",
+            ]
+            for col in expected_columns:
+                assert col in metrics.columns, f"Missing column: {col}"
+
+            # Quality flags should be 0 (OK) for valid synthetic data
+            assert (metrics["quality_flag"] == 0).all()
+
+            # Step 4: Validate against cruise data
+            # validate_against_cruise expects Point geometries (centroids),
+            # but the metrics GeoDataFrame has Polygon geometries from crown
+            # segmentation.  Convert to centroids before validation.
+            metrics_pts = metrics.copy()
+            metrics_pts["geometry"] = metrics_pts.geometry.centroid
+            cruise_csv = default_config["data"]["cruise_plots"]
+            val_result = validate_against_cruise(metrics_pts, cruise_csv, default_config)
+
+            assert isinstance(val_result, dict)
+            assert "n_predicted" in val_result
+            assert "n_reference" in val_result
+            assert "detection_rate" in val_result
+            assert val_result["n_predicted"] > 0
+            assert val_result["n_reference"] > 0

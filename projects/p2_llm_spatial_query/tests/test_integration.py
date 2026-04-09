@@ -7,9 +7,13 @@ SQL validation -> query execution -> result formatting.
 from __future__ import annotations
 
 from pathlib import Path
+from unittest.mock import patch
+
+import yaml
 
 from projects.p2_llm_spatial_query.src.executor import execute_query
 from projects.p2_llm_spatial_query.src.formatter import format_results
+from projects.p2_llm_spatial_query.src.pipeline import run_query
 from projects.p2_llm_spatial_query.src.prompt_builder import (
     build_system_prompt,
     build_user_prompt,
@@ -109,3 +113,73 @@ class TestValidateAndExecute:
 
         # Output should include column names
         assert "Columns:" in output
+
+
+# -----------------------------------------------------------------------
+# Full pipeline with mocked LLM
+# -----------------------------------------------------------------------
+
+class TestRunQueryMocked:
+    """Verify run_query end-to-end with the LLM layer mocked out."""
+
+    def test_run_query_returns_valid_result(
+        self,
+        gpkg_path: Path,
+        default_config: dict,
+        tmp_path: Path,
+    ) -> None:
+        """run_query should return a dict with expected keys when the LLM
+        generate_sql call is mocked to return a valid SELECT statement."""
+        # Build a temporary YAML config file with all required keys
+        config = {
+            "safety": default_config["safety"],
+            "llm": default_config["llm"],
+            "geopackage": {"path": str(gpkg_path)},
+            "rag": {
+                "few_shot_examples": "nonexistent.yaml",
+                "schema_metadata": "nonexistent.yaml",
+                "top_k": 5,
+            },
+            "schema": default_config.get("schema", {}),
+        }
+        config_path = tmp_path / "test_pipeline_config.yaml"
+        config_path.write_text(yaml.dump(config))
+
+        # Minimal schema metadata to satisfy prompt building
+        mock_schema = {
+            "layers": {
+                "harvest_units": {
+                    "description": "Proposed timber harvest units",
+                    "columns": {
+                        "unit_id": {"type": "integer", "description": "ID"},
+                        "geometry": {"type": "polygon", "srid": 3310},
+                    },
+                },
+            },
+        }
+
+        with (
+            patch(
+                "projects.p2_llm_spatial_query.src.sql_generator.generate_sql",
+                return_value="SELECT * FROM harvest_units",
+            ),
+            patch(
+                "projects.p2_llm_spatial_query.src.schema_extractor.load_schema_metadata",
+                return_value=mock_schema,
+            ),
+            patch(
+                "projects.p2_llm_spatial_query.src.prompt_builder.load_few_shot_examples",
+                return_value=[],
+            ),
+        ):
+            result = run_query("Show me all harvest units", str(config_path))
+
+        # Verify result structure
+        assert isinstance(result, dict)
+        for key in ("sql", "is_valid", "results_summary", "raw_results"):
+            assert key in result, f"Missing key: {key}"
+
+        # The mocked SQL is a valid SELECT, so validation should pass
+        assert result["is_valid"] is True
+        assert result["raw_results"] is not None
+        assert len(result["raw_results"]) > 0

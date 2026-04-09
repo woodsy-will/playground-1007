@@ -2,8 +2,12 @@
 
 from __future__ import annotations
 
+from pathlib import Path
+
 import numpy as np
 from pyproj import CRS
+
+from shared.utils.io import make_profile, write_raster
 
 
 class TestBuildPredictorStack:
@@ -39,6 +43,72 @@ class TestBuildPredictorStack:
         expected = {"bio1_mean_temp", "bio12_annual_precip", "canopy_cover",
                     "elevation", "slope", "tpi"}
         assert set(band_names) == expected
+
+
+class TestComputeTopoDerivatives:
+    """Verify topographic derivative computation from a DEM."""
+
+    @staticmethod
+    def _create_synthetic_dem(tmp_path: Path) -> Path:
+        """Write a small synthetic DEM raster and return its path."""
+        profile = make_profile(
+            bounds=(0.0, 0.0, 500.0, 500.0),
+            resolution=50.0,
+        )
+        rng = np.random.default_rng(99)
+        # Create a tilted surface with some noise so derivatives are non-trivial
+        h, w = profile["height"], profile["width"]
+        row_idx, col_idx = np.meshgrid(np.arange(h), np.arange(w), indexing="ij")
+        dem = (100.0 + 5.0 * row_idx + 3.0 * col_idx + rng.normal(0, 0.5, (h, w))).astype(
+            np.float32
+        )
+        dem_path = tmp_path / "dem.tif"
+        write_raster(dem_path, dem, profile)
+        return dem_path
+
+    def test_returns_dict_with_expected_keys(self, tmp_path: Path) -> None:
+        from projects.p4_habitat_suitability.src.predictors import compute_topo_derivatives
+
+        dem_path = self._create_synthetic_dem(tmp_path)
+        out_dir = tmp_path / "topo_out"
+        result = compute_topo_derivatives(dem_path, out_dir)
+
+        assert isinstance(result, dict)
+        assert set(result.keys()) == {"slope", "tpi", "twi"}
+
+    def test_slope_values_non_negative(self, tmp_path: Path) -> None:
+        from projects.p4_habitat_suitability.src.predictors import compute_topo_derivatives
+
+        dem_path = self._create_synthetic_dem(tmp_path)
+        out_dir = tmp_path / "topo_out"
+        result = compute_topo_derivatives(dem_path, out_dir)
+
+        from shared.utils.io import read_raster
+
+        slope_data, _ = read_raster(result["slope"])
+        assert np.all(slope_data >= 0), "Slope contains negative values"
+
+    def test_output_files_exist(self, tmp_path: Path) -> None:
+        from projects.p4_habitat_suitability.src.predictors import compute_topo_derivatives
+
+        dem_path = self._create_synthetic_dem(tmp_path)
+        out_dir = tmp_path / "topo_out"
+        result = compute_topo_derivatives(dem_path, out_dir)
+
+        for name, path in result.items():
+            assert Path(path).exists(), f"Output file missing for {name}"
+
+    def test_tpi_values_finite(self, tmp_path: Path) -> None:
+        from projects.p4_habitat_suitability.src.predictors import compute_topo_derivatives
+
+        dem_path = self._create_synthetic_dem(tmp_path)
+        out_dir = tmp_path / "topo_out"
+        result = compute_topo_derivatives(dem_path, out_dir)
+
+        from shared.utils.io import read_raster
+
+        tpi_data, _ = read_raster(result["tpi"])
+        assert np.all(np.isfinite(tpi_data)), "TPI contains non-finite values"
 
 
 class TestExtractValuesAtPoints:

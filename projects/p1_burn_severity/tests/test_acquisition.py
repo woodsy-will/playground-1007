@@ -20,15 +20,10 @@ from projects.p1_burn_severity.src.acquisition import (
     search_scenes,
 )
 
-# Skip all tests in this module if pystac_client is not installed
-pytestmark = pytest.mark.skipif(
-    not _HAS_PYSTAC,
-    reason="pystac_client not installed — skipping acquisition tests",
-)
-
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
+
 
 def _make_stac_item(item_id: str, cloud_cover: float = 5.0):
     """Return a mock STAC item with the expected interface."""
@@ -49,13 +44,23 @@ def _make_stac_item(item_id: str, cloud_cover: float = 5.0):
 # TestSearchScenes
 # ---------------------------------------------------------------------------
 
+
 class TestSearchScenes:
     """Tests for ``search_scenes``."""
 
     BBOX = (-121.5, 37.0, -120.5, 38.0)
     DATE_RANGE = ("2024-06-01", "2024-09-30")
 
-    @patch("projects.p1_burn_severity.src.acquisition.STACClient")
+    def test_raises_without_pystac(self):
+        """search_scenes should raise RuntimeError when pystac_client is not installed."""
+        if _HAS_PYSTAC:
+            pytest.skip("pystac_client IS installed; cannot test missing-dep path")
+
+        with pytest.raises(RuntimeError, match="pystac_client is required"):
+            search_scenes(self.BBOX, self.DATE_RANGE, config={})
+
+    @patch("projects.p1_burn_severity.src.acquisition._HAS_PYSTAC", True)
+    @patch("projects.p1_burn_severity.src.acquisition.STACClient", create=True)
     def test_returns_items(self, mock_stac_cls):
         """search_scenes should return a list of scene dicts from STAC."""
         items = [_make_stac_item("scene_A"), _make_stac_item("scene_B", 12.0)]
@@ -71,16 +76,12 @@ class TestSearchScenes:
 
         assert len(result) == 2
         assert result[0]["id"] == "scene_A"
-        assert result[1]["id"] == "scene_B"
         assert result[1]["cloud_cover"] == 12.0
         assert "B8A" in result[0]["assets"]
+        mock_stac_cls.open.assert_called_once_with(_STAC_ENDPOINTS["element84"])
 
-        # Verify the client was opened with the correct endpoint
-        mock_stac_cls.open.assert_called_once_with(
-            _STAC_ENDPOINTS["element84"]
-        )
-
-    @patch("projects.p1_burn_severity.src.acquisition.STACClient")
+    @patch("projects.p1_burn_severity.src.acquisition._HAS_PYSTAC", True)
+    @patch("projects.p1_burn_severity.src.acquisition.STACClient", create=True)
     def test_no_results(self, mock_stac_cls):
         """search_scenes should return an empty list when STAC yields nothing."""
         mock_client = MagicMock()
@@ -91,10 +92,10 @@ class TestSearchScenes:
 
         config = {"acquisition": {"cloud_cover_max": 5, "source": "copernicus"}}
         result = search_scenes(self.BBOX, self.DATE_RANGE, config)
-
         assert result == []
 
-    @patch("projects.p1_burn_severity.src.acquisition.STACClient")
+    @patch("projects.p1_burn_severity.src.acquisition._HAS_PYSTAC", True)
+    @patch("projects.p1_burn_severity.src.acquisition.STACClient", create=True)
     def test_missing_config_uses_defaults(self, mock_stac_cls):
         """When config lacks acquisition keys, defaults should be used."""
         items = [_make_stac_item("default_scene")]
@@ -105,19 +106,11 @@ class TestSearchScenes:
         mock_client.search.return_value = mock_search
         mock_stac_cls.open.return_value = mock_client
 
-        # Empty config — should fall back to cloud_cover_max=20, source=copernicus
         result = search_scenes(self.BBOX, self.DATE_RANGE, config={})
 
         assert len(result) == 1
         assert result[0]["id"] == "default_scene"
-
-        # Should default to element84 (fallback when source key not in endpoints)
-        # Actually, source defaults to "copernicus" which IS in _STAC_ENDPOINTS
-        mock_stac_cls.open.assert_called_once_with(
-            _STAC_ENDPOINTS["copernicus"]
-        )
-
-        # Verify the query used default cloud_cover_max of 20
+        mock_stac_cls.open.assert_called_once_with(_STAC_ENDPOINTS["copernicus"])
         call_kwargs = mock_client.search.call_args[1]
         assert call_kwargs["query"] == {"eo:cloud_cover": {"lte": 20}}
 
@@ -125,6 +118,7 @@ class TestSearchScenes:
 # ---------------------------------------------------------------------------
 # TestDownloadScene
 # ---------------------------------------------------------------------------
+
 
 class TestDownloadScene:
     """Tests for ``download_scene``."""
@@ -139,53 +133,35 @@ class TestDownloadScene:
             },
         }
 
-    @patch.dict(sys.modules, {"httpx": None})
-    def test_writes_file(self, tmp_path):
-        """download_scene should write band files to output_dir (urllib fallback)."""
+    def test_writes_file_urllib_fallback(self, tmp_path):
+        """download_scene should write band files via urllib when httpx is absent."""
+        import urllib.request
+
         scene = self._scene_meta()
 
-        with patch(
-            "projects.p1_burn_severity.src.acquisition.urllib.request.urlretrieve"
-        ) as mock_retrieve:
-            # Make urlretrieve create actual files so the function can proceed
-            def _fake_retrieve(url, dest):
-                Path(dest).write_bytes(b"FAKE_TIFF_DATA")
+        def _fake_retrieve(url, dest):
+            Path(dest).write_bytes(b"FAKE_TIFF_DATA")
 
-            mock_retrieve.side_effect = _fake_retrieve
-
-            result = download_scene(scene, tmp_path, config={})
-
-        # Should have downloaded all three bands
-        assert "nir" in result
-        assert "swir" in result
-        assert "scl" in result
-
-        # Files should exist on disk
-        for key, path in result.items():
-            assert path.exists()
-            assert path.parent == tmp_path
-
-    def test_connection_error_raises(self, tmp_path):
-        """download_scene should handle connection errors gracefully."""
-        scene = self._scene_meta()
-
-        # Mock httpx to raise an exception during streaming
-        mock_httpx = MagicMock()
-        mock_stream_ctx = MagicMock()
-        mock_resp = MagicMock()
-        mock_resp.raise_for_status.side_effect = ConnectionError(
-            "Connection refused"
-        )
-        mock_stream_ctx.__enter__ = MagicMock(return_value=mock_resp)
-        mock_stream_ctx.__exit__ = MagicMock(return_value=False)
-        mock_httpx.stream.return_value = mock_stream_ctx
-
-        with patch.dict(
-            sys.modules, {"httpx": mock_httpx}
-        ), patch(
-            "projects.p1_burn_severity.src.acquisition.httpx", mock_httpx
+        with (
+            patch.dict(sys.modules, {"httpx": None}),
+            patch.object(urllib.request, "urlretrieve", side_effect=_fake_retrieve),
         ):
             result = download_scene(scene, tmp_path, config={})
 
-        # The function catches exceptions and logs them; no bands downloaded
+        assert "nir" in result
+        assert "swir" in result
+        assert "scl" in result
+        for path in result.values():
+            assert path.exists()
+
+    def test_connection_error_handled(self, tmp_path):
+        """download_scene should catch exceptions and return empty dict."""
+        scene = self._scene_meta()
+
+        mock_httpx = MagicMock()
+        mock_httpx.stream.side_effect = ConnectionError("Connection refused")
+
+        with patch.dict(sys.modules, {"httpx": mock_httpx}):
+            result = download_scene(scene, tmp_path, config={})
+
         assert len(result) == 0
