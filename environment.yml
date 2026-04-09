@@ -28,6 +28,7 @@ dependencies:
   - pytest>=8.0
   - pytest-cov>=4.1
   - pyyaml>=6.0
+  - sqlparse>=0.5
   - requests>=2.31
   - tqdm>=4.66
   - jupyter>=1.0

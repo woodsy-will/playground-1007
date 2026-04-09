@@ -408,3 +408,76 @@ class TestStringLiteralEdgeCases:
         sql = "SELECT * FROM harvest_units WHERE unit_name = 'a;b'"
         is_valid, reason = validate_sql(sql, safety_config)
         assert is_valid, reason
+
+    def test_delete_keyword_in_string_literal(self, safety_config: dict) -> None:
+        """Blocked keywords inside string literals must not cause false
+        positives."""
+        sql = "SELECT * FROM harvest_units WHERE notes = 'DELETE old records'"
+        is_valid, reason = validate_sql(sql, safety_config)
+        assert is_valid, reason
+
+    def test_drop_keyword_in_string_literal(self, safety_config: dict) -> None:
+        sql = "SELECT * FROM harvest_units WHERE notes = 'will DROP by later'"
+        is_valid, reason = validate_sql(sql, safety_config)
+        assert is_valid, reason
+
+    def test_update_keyword_in_string_literal(self, safety_config: dict) -> None:
+        sql = "SELECT * FROM harvest_units WHERE notes = 'UPDATE pending'"
+        is_valid, reason = validate_sql(sql, safety_config)
+        assert is_valid, reason
+
+    def test_pragma_keyword_in_string_literal(self, safety_config: dict) -> None:
+        """Always-blocked keywords inside string literals must also be
+        ignored."""
+        sql = "SELECT * FROM harvest_units WHERE notes = 'see PRAGMA docs'"
+        is_valid, reason = validate_sql(sql, safety_config)
+        assert is_valid, reason
+
+
+# -----------------------------------------------------------------------
+# Nested subquery validation
+# -----------------------------------------------------------------------
+
+class TestNestedSubqueries:
+    """Subqueries must be validated recursively."""
+
+    def test_nested_select_valid(self, safety_config: dict) -> None:
+        sql = (
+            "SELECT * FROM (SELECT unit_name, ST_Area(geometry) "
+            "FROM harvest_units) sub"
+        )
+        is_valid, reason = validate_sql(sql, safety_config)
+        assert is_valid, reason
+
+    def test_deeply_nested_subquery_valid(self, safety_config: dict) -> None:
+        sql = (
+            "SELECT * FROM ("
+            "  SELECT * FROM ("
+            "    SELECT unit_name FROM harvest_units WHERE acres > 10"
+            "  ) inner_q"
+            ") outer_q"
+        )
+        is_valid, reason = validate_sql(sql, safety_config)
+        assert is_valid, reason
+
+    def test_nested_blocked_spatial_func(self, safety_config: dict) -> None:
+        """A blocked spatial function inside a subquery must be caught."""
+        sql = (
+            "SELECT * FROM ("
+            "  SELECT ST_Union(geometry) FROM harvest_units"
+            ") sub"
+        )
+        is_valid, reason = validate_sql(sql, safety_config)
+        assert not is_valid
+        assert "ST_Union" in reason
+
+    def test_nested_subquery_with_blocked_keyword(self, safety_config: dict) -> None:
+        """A blocked keyword inside a subquery must be caught."""
+        sql = (
+            "SELECT * FROM harvest_units "
+            "WHERE unit_id IN ("
+            "  SELECT unit_id FROM harvest_units; DELETE FROM streams"
+            ")"
+        )
+        is_valid, _ = validate_sql(sql, safety_config)
+        assert not is_valid

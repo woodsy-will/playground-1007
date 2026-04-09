@@ -9,6 +9,9 @@ GeoPackage.  The validator enforces a strict whitelist/blocklist approach:
   are explicitly blocked.
 - Only whitelisted spatial functions may appear.
 - Multi-statement injection via semicolons is detected and rejected.
+
+Validation uses ``sqlparse`` for tokenization so that keywords appearing
+inside string literals are correctly ignored (no false positives).
 """
 
 from __future__ import annotations
@@ -16,11 +19,14 @@ from __future__ import annotations
 import re
 from typing import Any
 
+import sqlparse
+from sqlparse import tokens as token_types
+
 from shared.utils.logging import get_logger
 
 logger = get_logger("p2_validator")
 
-# Pre-compiled patterns for performance
+# Pre-compiled patterns for comment/whitespace sanitization
 _COMMENT_PATTERN = re.compile(
     r"--[^\n]*|/\*.*?\*/",
     re.DOTALL,
@@ -61,6 +67,10 @@ def validate_sql(
 ) -> tuple[bool, str]:
     """Validate a SQL statement against safety rules.
 
+    Uses ``sqlparse`` for tokenization to properly distinguish keywords
+    from string literal content, eliminating false positives from blocked
+    keywords that appear inside quoted text.
+
     Checks are applied in order of severity:
 
     1. Statement must begin with SELECT (case-insensitive).
@@ -82,8 +92,9 @@ def validate_sql(
         ``(True, "")`` if valid, or ``(False, reason)`` if invalid.
     """
     safety = config.get("safety", {})
-    blocked_ops = [op.upper() for op in safety.get("blocked_operations", [])]
+    blocked_ops = {op.upper() for op in safety.get("blocked_operations", [])}
     allowed_ops = [op.upper() for op in safety.get("allowed_operations", [])]
+    allowed_spatial = {op for op in allowed_ops if op.startswith("ST_")}
 
     # Sanitize first
     cleaned = sanitize_sql(sql)
@@ -95,49 +106,63 @@ def validate_sql(
     if not cleaned.upper().lstrip().startswith("SELECT"):
         return False, "SQL must start with SELECT"
 
-    # 2a. Check for always-blocked SQLite keywords (security-critical,
-    #     independent of user config).
-    upper_sql = cleaned.upper()
-    for kw in _ALWAYS_BLOCKED:
-        pattern = rf"\b{re.escape(kw)}\b"
-        if re.search(pattern, upper_sql):
-            return False, f"Blocked keyword detected: {kw}"
+    # Parse with sqlparse — handles string literals, multi-statement, etc.
+    statements = sqlparse.parse(cleaned)
+    non_empty = [s for s in statements if str(s).strip()]
 
-    # 2b. Check for config-driven blocked operations
-    # Use word-boundary matching to avoid false positives (e.g. "UPDATED" in a
-    # column alias should not trip "UPDATE", but we err on the side of caution
-    # for safety \u2014 a standalone keyword is blocked).
-    for op in blocked_ops:
-        # Match the blocked keyword as a standalone word
-        pattern = rf"\b{re.escape(op)}\b"
-        if re.search(pattern, upper_sql):
-            return False, f"Blocked operation detected: {op}"
+    # 4. Multi-statement detection (checked early for security)
+    if len(non_empty) > 1:
+        return False, "Multiple SQL statements detected (possible injection)"
 
-    # 3. Check spatial functions \u2014 only whitelisted ones are allowed
-    # Find all function-call patterns that start with ST_
-    found_spatial = set(re.findall(r"\b(ST_\w+)\s*\(", cleaned, re.IGNORECASE))
-    allowed_upper = {op.upper() for op in allowed_ops if op.upper().startswith("ST_")}
-    for func in found_spatial:
-        if func.upper() not in allowed_upper:
-            return (
-                False,
-                f"Spatial function not in whitelist: {func}. "
-                f"Allowed: {', '.join(sorted(allowed_upper))}",
+    stmt = non_empty[0]
+    tokens = list(stmt.flatten())
+
+    for i, token in enumerate(tokens):
+        if token.is_whitespace:
+            continue
+
+        # Skip string literals — the core improvement over regex.
+        # sqlparse correctly tokenizes 'DELETE old records' as a single
+        # Literal.String.Single token, so blocked keywords inside quoted
+        # text are never inspected.
+        if token.ttype is not None and token.ttype in token_types.Literal.String:
+            continue
+
+        upper_val = token.value.upper()
+
+        # 2a. Check for always-blocked SQLite keywords (security-critical,
+        #     independent of user config).
+        if upper_val in _ALWAYS_BLOCKED:
+            return False, f"Blocked keyword detected: {upper_val}"
+
+        # 2b. Check for config-driven blocked operations
+        if upper_val in blocked_ops:
+            return False, f"Blocked operation detected: {upper_val}"
+
+        # 3. Check spatial functions — only whitelisted ones are allowed.
+        #    Only flag function calls (Name token followed by '(').
+        if upper_val.startswith("ST_"):
+            for j in range(i + 1, len(tokens)):
+                if tokens[j].is_whitespace:
+                    continue
+                if tokens[j].ttype is token_types.Punctuation and tokens[j].value == "(":
+                    if upper_val not in allowed_spatial:
+                        return (
+                            False,
+                            f"Spatial function not in whitelist: {token.value}. "
+                            f"Allowed: {', '.join(sorted(allowed_spatial))}",
+                        )
+                break
+
+        # 4. Semicolon detection (trailing or separating)
+        if token.ttype is token_types.Punctuation and token.value == ";":
+            has_trailing = any(
+                not tokens[j].is_whitespace
+                for j in range(i + 1, len(tokens))
             )
-
-    # 4. Multi-statement injection detection
-    # Remove content inside string literals before checking for semicolons
-    # to avoid false positives on quoted semicolons.
-    no_strings = re.sub(r"'[^']*'", "''", cleaned)
-    if ";" in no_strings:
-        # Check if there is meaningful content after the semicolon
-        parts = no_strings.split(";")
-        trailing = ";".join(parts[1:]).strip()
-        if trailing:
-            return False, "Multiple SQL statements detected (possible injection)"
-        # A bare trailing semicolon is just sloppy but not dangerous;
-        # we still reject it for strictness.
-        return False, "Trailing semicolon not allowed"
+            if has_trailing:
+                return False, "Multiple SQL statements detected (possible injection)"
+            return False, "Trailing semicolon not allowed"
 
     logger.info("SQL validation passed")
     return True, ""
