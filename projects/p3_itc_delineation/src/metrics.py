@@ -45,6 +45,7 @@ def extract_tree_metrics(
     -------
     GeoDataFrame
         Input dataframe augmented with ``max_height_m``, ``mean_height_m``,
+        ``quality_flag`` (0 = OK, 1 = extraction failed),
         ``dbh_inches``, and ``stem_volume_cuft`` columns.
     """
     chm_path = Path(chm_path)
@@ -69,7 +70,7 @@ def extract_tree_metrics(
                     mean_heights.append(0.0)
                 quality_flags.append(0)
             except (ValueError, IndexError, rasterio.errors.RasterioError) as exc:
-                logger.warning("Could not extract metrics for crown: %s", exc)
+                logger.debug("Could not extract metrics for crown: %s", exc)
                 max_heights.append(0.0)
                 mean_heights.append(0.0)
                 quality_flags.append(1)
