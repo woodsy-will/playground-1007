@@ -97,3 +97,83 @@ def threshold_suitability(
         int((binary == 0).sum()),
     )
     return binary.astype(np.uint8)
+
+
+def ensemble_project(
+    models: dict[str, Any],
+    cv_metrics: dict[str, dict[str, Any]],
+    stack: np.ndarray,
+    profile: dict,
+    config: dict[str, Any] | None = None,
+) -> tuple[np.ndarray, np.ndarray, dict, dict[str, float]]:
+    """Project multiple models and produce an AUC-weighted ensemble.
+
+    Each model is projected independently, then combined into a weighted
+    average where weights are the mean AUC from spatial block CV.  Models
+    with ``NaN`` AUC receive a weight of 0.5 (uninformative prior).
+
+    Parameters
+    ----------
+    models : dict[str, fitted model]
+        Mapping of algorithm name to fitted model object.
+    cv_metrics : dict[str, dict]
+        Mapping of algorithm name to CV result dict (must contain
+        ``auc_mean``).
+    stack : np.ndarray
+        Predictor raster stack ``(bands, rows, cols)``.
+    profile : dict
+        Rasterio profile for the predictor grid.
+    config : dict, optional
+        Project configuration (passed through to ``project_suitability``).
+
+    Returns
+    -------
+    tuple[np.ndarray, np.ndarray, dict, dict[str, float]]
+        - ensemble: 2-D weighted-average suitability ``(rows, cols)``.
+        - uncertainty: 2-D standard deviation across models.
+        - profile: updated rasterio profile (single band, float32).
+        - weights: mapping of algorithm name to normalised weight used.
+    """
+    if not models:
+        raise ValueError("At least one model is required for ensemble projection")
+
+    predictions: dict[str, np.ndarray] = {}
+    raw_weights: dict[str, float] = {}
+    out_profile: dict = {}
+
+    for name, model in models.items():
+        suit, out_profile = project_suitability(model, stack, profile, config)
+        predictions[name] = suit
+        auc = cv_metrics.get(name, {}).get("auc_mean", np.nan)
+        raw_weights[name] = auc if np.isfinite(auc) else 0.5
+
+    # Normalise weights to sum to 1
+    total_weight = sum(raw_weights.values())
+    weights = {k: v / total_weight for k, v in raw_weights.items()}
+
+    # Weighted average
+    ensemble = np.zeros_like(next(iter(predictions.values())), dtype=np.float64)
+    for name, suit in predictions.items():
+        # Treat NaN pixels as 0 contribution (they stay NaN in all models)
+        safe = np.where(np.isnan(suit), 0.0, suit)
+        ensemble += safe * weights[name]
+
+    # Restore NaN where ALL models had NaN
+    all_nan = np.all(
+        np.stack([np.isnan(s) for s in predictions.values()], axis=0),
+        axis=0,
+    )
+    ensemble[all_nan] = np.nan
+    ensemble = ensemble.astype(np.float32)
+
+    # Uncertainty (std across models)
+    pred_stack = np.stack(list(predictions.values()), axis=0)
+    uncertainty = np.nanstd(pred_stack, axis=0).astype(np.float32)
+
+    logger.info(
+        "Ensemble of %d models \u2014 weights: %s",
+        len(models),
+        {k: f"{v:.3f}" for k, v in weights.items()},
+    )
+
+    return ensemble, uncertainty, out_profile, weights
