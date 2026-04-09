@@ -12,6 +12,25 @@ python_files = ["test_*.py"]
 python_functions = ["test_*"]
 addopts = "-v --tb=short"
 
+[tool.coverage.run]
+source = ["projects", "shared"]
+omit = [
+    "*/tests/*",
+    "*/notebooks/*",
+    "*/__pycache__/*",
+    "shared/data/download_*.py",
+]
+
+[tool.coverage.report]
+fail_under = 80
+show_missing = true
+exclude_lines = [
+    "pragma: no cover",
+    "if __name__ == .__main__.",
+    "if TYPE_CHECKING:",
+    "raise NotImplementedError",
+]
+
 [tool.ruff]
 line-length = 100
 target-version = "py311"

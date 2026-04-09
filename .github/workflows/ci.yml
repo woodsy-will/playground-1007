@@ -38,9 +38,18 @@ jobs:
       - name: Install project in dev mode
         run: pip install -e ".[dev]" || pip install -e .
 
-      - name: Run tests
+      - name: Run tests with coverage
         run: |
-          pytest projects/p1_burn_severity/tests/ -v --tb=short -x
-          pytest projects/p2_llm_spatial_query/tests/ -v --tb=short -x
-          pytest projects/p3_itc_delineation/tests/ -v --tb=short -x
-          pytest projects/p4_habitat_suitability/tests/ -v --tb=short -x
+          pytest projects/ \
+            --cov=projects --cov=shared \
+            --cov-report=xml:coverage.xml \
+            --cov-report=term-missing \
+            --cov-config=pyproject.toml \
+            -v --tb=short
+
+      - name: Upload coverage report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-report
+          path: coverage.xml
