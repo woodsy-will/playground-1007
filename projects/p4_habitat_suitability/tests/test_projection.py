@@ -76,3 +76,152 @@ class TestThresholdSuitability:
         assert binary[0, 1] == 1
         assert binary[1, 0] == 0
         assert binary[1, 1] == 0  # NaN -> 0
+
+
+class TestEnsembleProject:
+    """Verify AUC-weighted ensemble projection."""
+
+    def _make_model_and_metrics(self, default_config):
+        """Helper: train two models and get CV metrics."""
+        from projects.p4_habitat_suitability.src.background import (
+            create_pa_matrix,
+            generate_background_points,
+        )
+        from projects.p4_habitat_suitability.src.modeling import (
+            train_maxent,
+            train_random_forest,
+        )
+        from projects.p4_habitat_suitability.src.occurrences import load_occurrences
+        from projects.p4_habitat_suitability.src.predictors import build_predictor_stack
+
+        gdf = load_occurrences(default_config)
+        stack, profile, band_names = build_predictor_stack(default_config)
+        bg = generate_background_points(
+            gdf, stack, profile, default_config, n_points=100,
+        )
+        X, y = create_pa_matrix(gdf, bg, stack, profile, band_names)  # noqa: N806
+
+        models = {
+            "maxent": train_maxent(X, y, default_config),
+            "random_forest": train_random_forest(X, y, default_config),
+        }
+        cv_metrics = {
+            "maxent": {"auc_mean": 0.75},
+            "random_forest": {"auc_mean": 0.85},
+        }
+        return models, cv_metrics, stack, profile
+
+    def test_ensemble_shape_matches_stack(self, default_config: dict):
+        from projects.p4_habitat_suitability.src.projection import ensemble_project
+
+        models, cv_metrics, stack, profile = self._make_model_and_metrics(
+            default_config,
+        )
+        ensemble, uncertainty, out_profile, weights = ensemble_project(
+            models, cv_metrics, stack, profile,
+        )
+
+        assert ensemble.shape == (profile["height"], profile["width"])
+        assert uncertainty.shape == ensemble.shape
+        assert out_profile["count"] == 1
+
+    def test_ensemble_values_in_0_1(self, default_config: dict):
+        from projects.p4_habitat_suitability.src.projection import ensemble_project
+
+        models, cv_metrics, stack, profile = self._make_model_and_metrics(
+            default_config,
+        )
+        ensemble, _, _, _ = ensemble_project(
+            models, cv_metrics, stack, profile,
+        )
+        valid = ensemble[np.isfinite(ensemble)]
+        assert valid.min() >= 0.0
+        assert valid.max() <= 1.0
+
+    def test_weights_sum_to_one(self, default_config: dict):
+        from projects.p4_habitat_suitability.src.projection import ensemble_project
+
+        models, cv_metrics, stack, profile = self._make_model_and_metrics(
+            default_config,
+        )
+        _, _, _, weights = ensemble_project(
+            models, cv_metrics, stack, profile,
+        )
+        assert len(weights) == 2
+        np.testing.assert_allclose(sum(weights.values()), 1.0, atol=1e-10)
+
+    def test_weights_reflect_auc(self, default_config: dict):
+        """Model with higher AUC should get higher weight."""
+        from projects.p4_habitat_suitability.src.projection import ensemble_project
+
+        models, cv_metrics, stack, profile = self._make_model_and_metrics(
+            default_config,
+        )
+        _, _, _, weights = ensemble_project(
+            models, cv_metrics, stack, profile,
+        )
+        assert weights["random_forest"] > weights["maxent"]
+
+    def test_single_model_degenerates(self, default_config: dict):
+        """Ensemble with one model equals that model's projection."""
+        from projects.p4_habitat_suitability.src.projection import (
+            ensemble_project,
+            project_suitability,
+        )
+
+        models, cv_metrics, stack, profile = self._make_model_and_metrics(
+            default_config,
+        )
+        single = {"random_forest": models["random_forest"]}
+        single_cv = {"random_forest": cv_metrics["random_forest"]}
+
+        ensemble, _, _, weights = ensemble_project(
+            single, single_cv, stack, profile,
+        )
+        direct, _ = project_suitability(
+            models["random_forest"], stack, profile,
+        )
+
+        # Single model gets weight 1.0
+        assert weights["random_forest"] == 1.0
+        # Results should be identical
+        valid = np.isfinite(ensemble) & np.isfinite(direct)
+        np.testing.assert_allclose(ensemble[valid], direct[valid], atol=1e-6)
+
+    def test_uncertainty_non_negative(self, default_config: dict):
+        from projects.p4_habitat_suitability.src.projection import ensemble_project
+
+        models, cv_metrics, stack, profile = self._make_model_and_metrics(
+            default_config,
+        )
+        _, uncertainty, _, _ = ensemble_project(
+            models, cv_metrics, stack, profile,
+        )
+        valid = uncertainty[np.isfinite(uncertainty)]
+        assert np.all(valid >= 0.0)
+
+    def test_empty_models_raises(self):
+        import pytest
+
+        from projects.p4_habitat_suitability.src.projection import ensemble_project
+
+        with pytest.raises(ValueError, match="At least one model"):
+            ensemble_project({}, {}, np.zeros((1, 2, 2)), {})
+
+    def test_nan_auc_gets_default_weight(self, default_config: dict):
+        """Model with NaN AUC should receive weight 0.5."""
+        from projects.p4_habitat_suitability.src.projection import ensemble_project
+
+        models, _, stack, profile = self._make_model_and_metrics(
+            default_config,
+        )
+        cv_metrics = {
+            "maxent": {"auc_mean": np.nan},
+            "random_forest": {"auc_mean": 0.5},
+        }
+        _, _, _, weights = ensemble_project(
+            models, cv_metrics, stack, profile,
+        )
+        # Both should be 0.5 raw \u2192 0.5 each normalised
+        np.testing.assert_allclose(weights["maxent"], 0.5, atol=1e-10)
+        np.testing.assert_allclose(weights["random_forest"], 0.5, atol=1e-10)

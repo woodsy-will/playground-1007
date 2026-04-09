@@ -29,12 +29,13 @@ def run_pipeline(config_path: str | Path) -> dict[str, Any]:
     -------
     dict
         Dictionary with keys:
-        - ``occurrences_raw``: path to raw occurrence file
+        - ``occurrences_raw_count``: number of raw occurrence records
         - ``occurrences_thinned``: count of thinned records
         - ``predictor_stack_shape``: tuple of stack dimensions
         - ``band_names``: list of predictor names
         - ``cv_metrics``: dict of cross-validation results
-        - ``suitability_current``: path to current suitability raster
+        - ``suitability_ensemble``: path to AUC-weighted ensemble raster
+        - ``ensemble_weights``: dict of algorithm name to normalised weight
         - ``change_summary``: DataFrame of change statistics
         - ``models``: dict of fitted model objects
     """
@@ -60,7 +61,7 @@ def run_pipeline(config_path: str | Path) -> dict[str, Any]:
         build_predictor_stack,
     )
     from projects.p4_habitat_suitability.src.projection import (
-        project_suitability,
+        ensemble_project,
     )
 
     config = load_config(config_path)
@@ -129,20 +130,26 @@ def run_pipeline(config_path: str | Path) -> dict[str, Any]:
         importance_df = compute_variable_importance(primary_model, X, y, band_names)
         importance_df.to_csv(output_dir / "variable_importance.csv", index=False)
 
-    # --- 7. Project current suitability ---
-    logger.info("Step 6: Projecting current suitability")
-    if primary_model is not None:
-        suitability, suit_profile = project_suitability(
-            primary_model, stack, profile, config,
+    # --- 7. Ensemble projection ---
+    logger.info("Step 6: Projecting ensemble suitability")
+    ensemble_weights: dict[str, float] = {}
+    if models:
+        suitability, uncertainty, suit_profile, ensemble_weights = ensemble_project(
+            models, cv_metrics, stack, profile, config,
         )
-        suit_path = output_dir / "suitability_current.tif"
+        suit_path = output_dir / "suitability_ensemble.tif"
         write_raster(suit_path, suitability, suit_profile)
+
+        uncert_path = output_dir / "suitability_uncertainty.tif"
+        write_raster(uncert_path, uncertainty, suit_profile)
 
         # --- 8. Future projections and change analysis ---
         # In a real workflow, future_stack would come from downscaled
         # CMIP6 predictors.  Here we demonstrate the change pipeline
         # using the current stack as a stand-in.
-        future_suit, _ = project_suitability(primary_model, stack, profile, config)
+        future_suit, _, _, _ = ensemble_project(
+            models, cv_metrics, stack, profile, config,
+        )
 
         change = compute_change(suitability, future_suit)
         change_path = output_dir / "habitat_change.tif"
@@ -160,7 +167,8 @@ def run_pipeline(config_path: str | Path) -> dict[str, Any]:
         "predictor_stack_shape": stack.shape,
         "band_names": band_names,
         "cv_metrics": cv_metrics,
-        "suitability_current": str(suit_path) if suit_path else None,
+        "suitability_ensemble": str(suit_path) if suit_path else None,
+        "ensemble_weights": ensemble_weights,
         "change_summary": change_df,
         "models": models,
     }
