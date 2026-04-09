@@ -40,7 +40,7 @@ jobs:
 
       - name: Run tests with coverage
         run: |
-          pytest projects/ \
+          pytest projects/ shared/ \
             --cov=projects --cov=shared \
             --cov-report=xml:coverage.xml \
             --cov-report=term-missing \

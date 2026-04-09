@@ -139,7 +139,7 @@ class TestDownloadScene:
             },
         }
 
-    @patch("projects.p1_burn_severity.src.acquisition.httpx", new=None)
+    @patch.dict(sys.modules, {"httpx": None})
     def test_writes_file(self, tmp_path):
         """download_scene should write band files to output_dir (urllib fallback)."""
         scene = self._scene_meta()

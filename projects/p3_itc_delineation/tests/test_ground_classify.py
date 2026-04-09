@@ -6,8 +6,9 @@ They are automatically skipped if the dependency is missing.
 
 from __future__ import annotations
 
+import sys
 from pathlib import Path
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock
 
 import pytest
 
@@ -25,11 +26,9 @@ class TestClassifyGround:
         laz_path.touch()
         default_config["data"]["output_dir"] = str(tmp_path / "output")
 
-        mock_pipeline = MagicMock()
-        with patch(
-            "projects.p3_itc_delineation.src.ground_classify.pdal"
-        ) as mock_pdal:
-            mock_pdal.Pipeline.return_value = mock_pipeline
+        mock_pdal = MagicMock()
+        with pytest.MonkeyPatch.context() as mp:
+            mp.setitem(sys.modules, "pdal", mock_pdal)
             output_dir = tmp_path / "output"
             output_dir.mkdir(parents=True, exist_ok=True)
             (output_dir / "test_cloud_classified.laz").touch()
