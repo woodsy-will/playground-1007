@@ -12,6 +12,7 @@ from typing import Any
 import geopandas as gpd
 import numpy as np
 import rasterio
+import rasterio.errors
 import rasterio.mask
 
 from shared.utils.allometry import dbh_from_crown_diameter, stem_volume_cuft
@@ -50,6 +51,8 @@ def extract_tree_metrics(
 
     max_heights: list[float] = []
     mean_heights: list[float] = []
+    quality_flags: list[int] = []
+    error_count = 0
 
     with rasterio.open(chm_path) as src:
         for _, row in crowns_gdf.iterrows():
@@ -64,14 +67,23 @@ def extract_tree_metrics(
                 else:
                     max_heights.append(0.0)
                     mean_heights.append(0.0)
-            except (ValueError, IndexError) as exc:
+                quality_flags.append(0)
+            except (ValueError, IndexError, rasterio.errors.RasterioError) as exc:
                 logger.warning("Could not extract metrics for crown: %s", exc)
                 max_heights.append(0.0)
                 mean_heights.append(0.0)
+                quality_flags.append(1)
+                error_count += 1
+
+    if error_count > 0:
+        logger.warning(
+            "Metric extraction failed for %d of %d crowns", error_count, len(crowns_gdf)
+        )
 
     result = crowns_gdf.copy()
     result["max_height_m"] = max_heights
     result["mean_height_m"] = mean_heights
+    result["quality_flag"] = quality_flags
 
     # Allometric estimates
     cd_m = result["crown_diameter_m"].values.astype(np.float64)
