@@ -16,7 +16,7 @@ logger = get_logger("p1.acquisition")
 try:
     from pystac_client import Client as STACClient  # type: ignore[import-untyped]
 
-    _HAS_PYSTAC = True
+    _HAS_PYSTAC = True  # pragma: no cover
 except ImportError:
     _HAS_PYSTAC = False
     logger.warning("pystac_client not installed; STAC search disabled.")

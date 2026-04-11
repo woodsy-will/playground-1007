@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
+import sys
 from pathlib import Path
+from unittest.mock import MagicMock, patch
 
 import numpy as np
 
@@ -64,3 +66,42 @@ class TestGenerateCHM:
 
         # Gaussian smoothing should reduce peak values
         assert smoothed_max <= raw_max + 0.01
+
+    def test_generate_chm_from_laz_file(
+        self, chm_path: Path, dtm_path: Path, default_config: dict
+    ):
+        """CHM generation from a .laz file triggers the LAZ branch and
+        calls _generate_dsm_from_laz, which imports pdal internally."""
+        from projects.p3_itc_delineation.src.chm import generate_chm
+
+        output_dir = Path(default_config["data"]["output_dir"])
+        output_dir.mkdir(parents=True, exist_ok=True)
+
+        # Create a fake .laz file (just needs to exist with the right extension)
+        laz_file = output_dir / "test_input.laz"
+        laz_file.write_bytes(b"FAKE_LAZ_DATA")
+
+        # Pre-create the DSM file that _generate_dsm_from_laz would produce.
+        # Use the CHM data added to DTM data as a valid DSM raster.
+        chm_data, chm_profile = read_raster(chm_path)
+        dtm_data, _ = read_raster(dtm_path)
+        dsm = dtm_data[0] + chm_data[0]
+        dsm_path = output_dir / "dsm.tif"
+        write_raster(dsm_path, dsm, chm_profile)
+
+        # Mock pdal module so the import inside _generate_dsm_from_laz works
+        mock_pdal = MagicMock()
+        mock_pipeline = MagicMock()
+        mock_pdal.Pipeline.return_value = mock_pipeline
+
+        with patch.dict(sys.modules, {"pdal": mock_pdal}):
+            result = generate_chm(laz_file, dtm_path, default_config)
+
+        # The LAZ branch should have been triggered: pdal.Pipeline was called
+        mock_pdal.Pipeline.assert_called_once()
+        mock_pipeline.execute.assert_called_once()
+
+        # Output CHM should exist and contain non-negative values
+        assert result.exists()
+        result_data, _ = read_raster(result)
+        assert np.all(result_data >= 0)

@@ -481,3 +481,47 @@ class TestNestedSubqueries:
         )
         is_valid, _ = validate_sql(sql, safety_config)
         assert not is_valid
+
+
+# -----------------------------------------------------------------------
+# Additional coverage tests for blocked-keyword-inside-SELECT and
+# spatial-function whitespace lookahead
+# -----------------------------------------------------------------------
+
+class TestBlockedKeywordInsideSelect:
+    """Cover line 140: blocked operation token inside a SELECT statement."""
+
+    def test_blocked_keyword_as_column_name(self, safety_config: dict) -> None:
+        """DELETE used as a column name inside a SELECT still triggers the
+        config-driven blocked-ops check (line 140)."""
+        sql = "SELECT DELETE FROM harvest_units"
+        is_valid, reason = validate_sql(sql, safety_config)
+        assert not is_valid
+        assert "Blocked operation detected: DELETE" in reason
+
+    def test_blocked_keyword_truncate_inside_select(self, safety_config: dict) -> None:
+        """TRUNCATE appearing as a token inside a SELECT triggers line 140."""
+        sql = "SELECT TRUNCATE FROM harvest_units"
+        is_valid, reason = validate_sql(sql, safety_config)
+        assert not is_valid
+        assert "Blocked operation detected: TRUNCATE" in reason
+
+
+class TestSpatialFunctionWhitespaceLookahead:
+    """Cover line 147: whitespace skip between ST_ name and opening paren."""
+
+    def test_spatial_func_with_space_before_paren(self, safety_config: dict) -> None:
+        """ST_Buffer (geometry, 100) with a space before '(' should still
+        pass validation for allowed spatial functions."""
+        sql = "SELECT ST_Buffer (geometry, 100) FROM harvest_units"
+        is_valid, reason = validate_sql(sql, safety_config)
+        assert is_valid, reason
+
+    def test_blocked_spatial_func_with_space_before_paren(
+        self, safety_config: dict
+    ) -> None:
+        """ST_Union (geometry) with space before '(' must still be blocked."""
+        sql = "SELECT ST_Union (geometry) FROM harvest_units"
+        is_valid, reason = validate_sql(sql, safety_config)
+        assert not is_valid
+        assert "ST_Union" in reason

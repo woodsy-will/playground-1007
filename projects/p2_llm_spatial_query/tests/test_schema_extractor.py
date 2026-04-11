@@ -87,3 +87,37 @@ class TestLoadSchemaMetadata:
         config = {"rag": {"schema_metadata": "/nonexistent/path.yaml"}}
         with pytest.raises(FileNotFoundError):
             load_schema_metadata(config)
+
+
+class TestExtractSchemaWithoutGeometryTable:
+    """Cover the except branch when gpkg_geometry_columns is absent."""
+
+    def test_extract_schema_without_geometry_table(self, tmp_path: Path) -> None:
+        """A plain SQLite DB (no gpkg_geometry_columns) should still work,
+        logging a warning but not raising."""
+        import sqlite3
+
+        db_path = tmp_path / "plain.gpkg"
+        conn = sqlite3.connect(str(db_path))
+        cursor = conn.cursor()
+        # Create the gpkg_contents table (required by extract_schema)
+        cursor.execute(
+            "CREATE TABLE gpkg_contents ("
+            "  table_name TEXT, identifier TEXT, description TEXT, data_type TEXT"
+            ")"
+        )
+        # Create a simple data table
+        cursor.execute("CREATE TABLE my_layer (id INTEGER PRIMARY KEY, name TEXT)")
+        cursor.execute(
+            "INSERT INTO gpkg_contents VALUES "
+            "('my_layer', 'my_layer', 'Test layer', 'features')"
+        )
+        conn.commit()
+        conn.close()
+
+        schema = extract_schema(db_path)
+        assert "layers" in schema
+        assert "my_layer" in schema["layers"]
+        cols = schema["layers"]["my_layer"]["columns"]
+        assert "id" in cols
+        assert "name" in cols

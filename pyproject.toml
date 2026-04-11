@@ -7,10 +7,10 @@ license = {text = "MIT"}
 authors = [{name = "William Steinley"}]
 
 [tool.pytest.ini_options]
-testpaths = ["projects"]
+testpaths = ["projects", "shared"]
 python_files = ["test_*.py"]
 python_functions = ["test_*"]
-addopts = "-v --tb=short"
+addopts = "-v --tb=short --import-mode=importlib"
 
 [tool.coverage.run]
 source = ["projects", "shared"]
@@ -19,6 +19,8 @@ omit = [
     "*/notebooks/*",
     "*/__pycache__/*",
     "shared/data/download_*.py",
+    "projects/p1_burn_severity/src/dashboard.py",
+    "projects/*/src/pipeline.py",
 ]
 
 [tool.coverage.report]

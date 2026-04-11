@@ -128,6 +128,54 @@ class TestQualityFlags:
             assert col in result.columns
 
 
+class TestCrownOverZeroHeightArea:
+    """Cover the else branch (lines 69-70) when all CHM values <= 0."""
+
+    def test_crown_over_zero_height_area(self, tmp_path, default_config):
+        """A crown polygon over CHM pixels that are all <= 0 should get
+        max_height=0, mean_height=0, quality_flag=0."""
+        import rasterio
+        from rasterio.transform import from_bounds
+
+        from projects.p3_itc_delineation.src.metrics import extract_tree_metrics
+
+        # Create a small CHM raster with all-zero values
+        height, width = 10, 10
+        transform = from_bounds(0, 0, 10, 10, width, height)
+        chm_data = np.zeros((1, height, width), dtype=np.float32)
+        chm_file = tmp_path / "zero_chm.tif"
+
+        with rasterio.open(
+            chm_file,
+            "w",
+            driver="GTiff",
+            height=height,
+            width=width,
+            count=1,
+            dtype="float32",
+            crs="EPSG:3310",
+            transform=transform,
+        ) as dst:
+            dst.write(chm_data)
+
+        # Crown polygon that overlaps the CHM but all values are 0
+        crown = box(1, 1, 5, 5)
+        gdf = gpd.GeoDataFrame(
+            {
+                "tree_id": [1],
+                "crown_area_m2": [16.0],
+                "crown_diameter_m": [4.51],
+            },
+            geometry=[crown],
+            crs="EPSG:3310",
+        )
+
+        result = extract_tree_metrics(gdf, chm_file, default_config)
+        assert result["max_height_m"].iloc[0] == 0.0
+        assert result["mean_height_m"].iloc[0] == 0.0
+        assert result["quality_flag"].iloc[0] == 0
+
+
 class TestAllometryValues:
     """Verify allometric equations produce mathematically correct values."""
 

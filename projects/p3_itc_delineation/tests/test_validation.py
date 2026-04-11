@@ -119,3 +119,61 @@ class TestValidateAgainstCruise:
         result = validate_against_cruise(empty, cruise_csv_fixture, default_config)
         assert result["detection_rate"] == 0.0
         assert result["n_matched"] == 0
+
+    def test_stratify_by_missing_column(
+        self,
+        predicted_gdf: gpd.GeoDataFrame,
+        cruise_csv_fixture: Path,
+    ):
+        """Stratifying by a column that doesn't exist in cruise data
+        should skip without error (covers line 121)."""
+        from projects.p3_itc_delineation.src.validation import validate_against_cruise
+
+        config = {
+            "validation": {
+                "match_distance": 3.0,
+                "stratify_by": ["nonexistent_column"],
+            },
+        }
+        result = validate_against_cruise(predicted_gdf, cruise_csv_fixture, config)
+        assert isinstance(result, dict)
+        # The missing column should not appear in by_stratum or have empty metrics
+        assert result["by_stratum"].get("nonexistent_column") is None
+
+    def test_stratify_empty_stratum(
+        self,
+        predicted_gdf: gpd.GeoDataFrame,
+        tmp_path: Path,
+    ):
+        """A stratum value with no cruise data after filtering should be
+        skipped (covers line 127)."""
+        import numpy as np
+
+        from projects.p3_itc_delineation.src.validation import validate_against_cruise
+
+        # Create cruise CSV with a stratum column that has a value with
+        # stems but also NaN values (dropna removes them, so the loop skips)
+        df = pd.DataFrame(
+            {
+                "stem_x": [-199_966.5, -199_933.5],
+                "stem_y": [-49_900.5, -49_900.5],
+                "dbh_inches": [14.0, 19.0],
+                "height_ft": [65.6, 82.0],
+                "species": ["ABCO", "PIPO"],
+                "size_class": ["small", np.nan],
+            }
+        )
+        csv_path = tmp_path / "cruise_stratum.csv"
+        df.to_csv(csv_path, index=False)
+
+        config = {
+            "validation": {
+                "match_distance": 3.0,
+                "stratify_by": ["size_class"],
+            },
+        }
+        result = validate_against_cruise(predicted_gdf, csv_path, config)
+        assert isinstance(result, dict)
+        # Only "small" should appear; NaN is dropped by dropna()
+        stratum_metrics = result["by_stratum"].get("size_class", {})
+        assert "small" in stratum_metrics

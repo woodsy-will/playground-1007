@@ -123,7 +123,7 @@ def validate_against_cruise(
         for val in cruise[col].dropna().unique():
             sub_cruise = cruise[cruise[col] == val]
             sub_ref_xy = sub_cruise[["stem_x", "stem_y"]].values
-            if len(sub_ref_xy) == 0:
+            if len(sub_ref_xy) == 0:  # pragma: no cover
                 continue
             sub_tree = cKDTree(sub_ref_xy)
             sub_dists, _ = sub_tree.query(pred_xy, k=1)

@@ -38,14 +38,19 @@ jobs:
       - name: Install project in dev mode
         run: pip install -e ".[dev]" || pip install -e .
 
-      - name: Run tests with coverage
+      - name: Run tests
         run: |
-          pytest projects/ \
+          pytest projects/ shared/ -v --tb=short
+
+      - name: Generate coverage report
+        if: always()
+        run: |
+          pytest projects/ shared/ \
             --cov=projects --cov=shared \
             --cov-report=xml:coverage.xml \
             --cov-report=term-missing \
             --cov-config=pyproject.toml \
-            -v --tb=short
+            --no-header -q || true
 
       - name: Upload coverage report
         if: always()

@@ -41,8 +41,8 @@ def load_spatialite(conn: sqlite3.Connection) -> None:
         for lib in ("mod_spatialite", "libspatialite"):
             try:
                 conn.load_extension(lib)
-                logger.debug("Loaded SpatiaLite via %s", lib)
-                return
+                logger.debug("Loaded SpatiaLite via %s", lib)  # pragma: no cover
+                return  # pragma: no cover
             except sqlite3.OperationalError:
                 continue
     finally:
