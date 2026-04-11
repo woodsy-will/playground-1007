@@ -236,3 +236,162 @@ class TestEnsembleProject:
         # Both should be 0.5 raw \u2192 0.5 each normalised
         np.testing.assert_allclose(weights["maxent"], 0.5, atol=1e-10)
         np.testing.assert_allclose(weights["random_forest"], 0.5, atol=1e-10)
+
+
+# -----------------------------------------------------------------------
+# Mock-based tests that do NOT require sklearn
+# -----------------------------------------------------------------------
+
+
+class TestProjectSuitabilityMock:
+    """Cover project_suitability using mock models (no sklearn needed)."""
+
+    def _make_mock_model(self, n_classes: int = 2):
+        from unittest.mock import MagicMock
+
+        model = MagicMock()
+        model.predict_proba = MagicMock(
+            side_effect=lambda X: np.column_stack(  # noqa: N803
+                [np.full(len(X), 0.3), np.full(len(X), 0.7)]
+            )
+        )
+        del model.scaler_
+        return model
+
+    def test_project_suitability_with_mock_model(self):
+        from projects.p4_habitat_suitability.src.projection import project_suitability
+
+        model = self._make_mock_model()
+        stack = np.random.default_rng(0).random((3, 4, 5)).astype(np.float32)
+        profile = {"height": 4, "width": 5, "count": 3, "dtype": "float32"}
+
+        suitability, out_profile = project_suitability(model, stack, profile)
+
+        assert suitability.shape == (4, 5)
+        assert out_profile["count"] == 1
+        valid = suitability[np.isfinite(suitability)]
+        assert valid.min() >= 0.0
+        assert valid.max() <= 1.0
+        np.testing.assert_allclose(valid, 0.7, atol=1e-6)
+
+    def test_project_suitability_with_scaler(self):
+        from unittest.mock import MagicMock
+
+        from projects.p4_habitat_suitability.src.projection import project_suitability
+
+        model = self._make_mock_model()
+        scaler = MagicMock()
+        scaler.transform = MagicMock(side_effect=lambda x: x)
+        model.scaler_ = scaler
+
+        stack = np.random.default_rng(1).random((2, 3, 3)).astype(np.float32)
+        profile = {"height": 3, "width": 3, "count": 2, "dtype": "float32"}
+
+        suitability, _ = project_suitability(model, stack, profile)
+
+        assert suitability.shape == (3, 3)
+        scaler.transform.assert_called_once()
+
+    def test_project_suitability_handles_nan_pixels(self):
+        from projects.p4_habitat_suitability.src.projection import project_suitability
+
+        model = self._make_mock_model()
+        stack = np.ones((2, 2, 2), dtype=np.float32)
+        stack[0, 0, 0] = np.nan
+
+        profile = {"height": 2, "width": 2, "count": 2, "dtype": "float32"}
+        suitability, _ = project_suitability(model, stack, profile)
+
+        assert np.isnan(suitability[0, 0])
+        assert np.isfinite(suitability[0, 1])
+
+
+class TestEnsembleProjectMock:
+    """Cover ensemble_project using mock models (no sklearn needed)."""
+
+    def _make_mock_model(self, prob: float = 0.7):
+        from unittest.mock import MagicMock
+
+        model = MagicMock()
+        model.predict_proba = MagicMock(
+            side_effect=lambda X: np.column_stack(  # noqa: N803
+                [np.full(len(X), 1.0 - prob), np.full(len(X), prob)]
+            )
+        )
+        del model.scaler_
+        return model
+
+    def test_ensemble_project_with_mock_models(self):
+        from projects.p4_habitat_suitability.src.projection import ensemble_project
+
+        models = {
+            "model_a": self._make_mock_model(prob=0.6),
+            "model_b": self._make_mock_model(prob=0.8),
+        }
+        cv_metrics = {
+            "model_a": {"auc_mean": 0.7},
+            "model_b": {"auc_mean": 0.9},
+        }
+        stack = np.random.default_rng(0).random((2, 3, 3)).astype(np.float32)
+        profile = {"height": 3, "width": 3, "count": 2, "dtype": "float32"}
+
+        ensemble, uncertainty, out_profile, weights = ensemble_project(
+            models, cv_metrics, stack, profile,
+        )
+
+        assert ensemble.shape == (3, 3)
+        assert uncertainty.shape == (3, 3)
+        assert out_profile["count"] == 1
+        np.testing.assert_allclose(sum(weights.values()), 1.0, atol=1e-10)
+        assert weights["model_b"] > weights["model_a"]
+
+    def test_ensemble_project_single_model(self):
+        from unittest.mock import MagicMock
+
+        from projects.p4_habitat_suitability.src.projection import (
+            ensemble_project,
+            project_suitability,
+        )
+
+        model = MagicMock()
+        model.predict_proba = MagicMock(
+            side_effect=lambda X: np.column_stack(  # noqa: N803
+                [np.full(len(X), 0.35), np.full(len(X), 0.65)]
+            )
+        )
+        del model.scaler_
+
+        models = {"only": model}
+        cv_metrics = {"only": {"auc_mean": 0.8}}
+        stack = np.random.default_rng(2).random((2, 2, 2)).astype(np.float32)
+        profile = {"height": 2, "width": 2, "count": 2, "dtype": "float32"}
+
+        ensemble, _, _, weights = ensemble_project(
+            models, cv_metrics, stack, profile,
+        )
+
+        assert weights["only"] == 1.0
+        direct, _ = project_suitability(model, stack, profile)
+        valid = np.isfinite(ensemble) & np.isfinite(direct)
+        np.testing.assert_allclose(ensemble[valid], direct[valid], atol=1e-6)
+
+    def test_ensemble_project_nan_auc(self):
+        from projects.p4_habitat_suitability.src.projection import ensemble_project
+
+        models = {
+            "a": self._make_mock_model(prob=0.5),
+            "b": self._make_mock_model(prob=0.5),
+        }
+        cv_metrics = {
+            "a": {"auc_mean": np.nan},
+            "b": {"auc_mean": 0.5},
+        }
+        stack = np.random.default_rng(3).random((2, 2, 2)).astype(np.float32)
+        profile = {"height": 2, "width": 2, "count": 2, "dtype": "float32"}
+
+        _, _, _, weights = ensemble_project(
+            models, cv_metrics, stack, profile,
+        )
+
+        np.testing.assert_allclose(weights["a"], 0.5, atol=1e-10)
+        np.testing.assert_allclose(weights["b"], 0.5, atol=1e-10)
