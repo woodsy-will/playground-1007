@@ -295,3 +295,16 @@ class TestGenerateAll:
         assert expected_keys.issubset(set(paths.keys())), (
             f"Missing keys: {expected_keys - set(paths.keys())}"
         )
+
+    def test_cruise_plots_without_reference(self, tmp_path: Path):
+        """generate_synthetic_cruise_plots uses fallback when no ref CSV exists."""
+        import pandas as pd
+
+        from shared.data.generate_synthetic import generate_synthetic_cruise_plots
+
+        # Call on a fresh directory with no synthetic_tree_reference.csv
+        path = generate_synthetic_cruise_plots(tmp_path, n_trees=3)
+        assert path.exists()
+        df = pd.read_csv(path)
+        assert len(df) == 3
+        assert "dbh_inches" in df.columns
