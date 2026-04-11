@@ -343,3 +343,108 @@ class TestRunQueryMocked:
 
         assert "Error" in result["results_summary"]
         assert result["is_valid"] is True
+
+
+# -----------------------------------------------------------------------
+# Formatter integration
+# -----------------------------------------------------------------------
+
+
+class TestFormatterIntegration:
+    """Chain: execute_query -> format_results and format_error."""
+
+    def test_execute_then_format_results(
+        self,
+        gpkg_path: Path,
+        default_config: dict,
+    ) -> None:
+        """Execute a valid query, format results, verify output includes
+        row count and column names."""
+        sql = "SELECT unit_id, unit_name, acres FROM harvest_units"
+        results = execute_query(sql, gpkg_path, default_config)
+        assert len(results) > 0
+
+        user_query = "List all harvest units"
+        output = format_results(results, user_query)
+
+        # Output should contain the query, row count, and column names
+        assert "Query: List all harvest units" in output
+        assert f"Rows returned: {len(results)}" in output
+        assert "Columns:" in output
+        assert "unit_id" in output
+        assert "unit_name" in output
+        assert "acres" in output
+
+    def test_format_error_with_real_error(
+        self,
+        gpkg_path: Path,
+        default_config: dict,
+    ) -> None:
+        """Execute a bad SQL query (trigger exception), format the error
+        message, verify output includes suggestions."""
+        from projects.p2_llm_spatial_query.src.formatter import format_error
+
+        # Try to execute an invalid query to capture the error
+        bad_sql = "SELECT * FROM nonexistent_table_xyz"
+        user_query = "Show me nonexistent data"
+        try:
+            execute_query(bad_sql, gpkg_path, default_config)
+            error_msg = "Unexpected success"
+        except Exception as exc:
+            error_msg = str(exc)
+
+        # Format the error
+        output = format_error(error_msg, user_query)
+
+        # Output should contain the query and suggestions
+        assert "Query: Show me nonexistent data" in output
+        assert "Suggestions:" in output
+        assert "Error:" in output
+
+
+# -----------------------------------------------------------------------
+# Validator to executor chain
+# -----------------------------------------------------------------------
+
+
+class TestValidatorToExecutor:
+    """Chain: validate_sql -> execute_query for multiple queries."""
+
+    def test_validate_multiple_queries_then_execute(
+        self,
+        gpkg_path: Path,
+        default_config: dict,
+    ) -> None:
+        """Validate a batch of queries (some valid, some invalid), execute
+        only valid ones, verify correct counts."""
+        queries = [
+            ("SELECT * FROM harvest_units", True),
+            ("DELETE FROM harvest_units", False),
+            ("SELECT unit_name FROM harvest_units", True),
+            ("DROP TABLE streams", False),
+            ("SELECT COUNT(*) AS cnt FROM harvest_units", True),
+        ]
+
+        valid_results = []
+        invalid_count = 0
+
+        for sql, expected_valid in queries:
+            is_valid, reason = validate_sql(sql, default_config)
+            assert is_valid == expected_valid, (
+                f"SQL '{sql}' expected valid={expected_valid}, "
+                f"got valid={is_valid} reason={reason}"
+            )
+
+            if is_valid:
+                result = execute_query(sql, gpkg_path, default_config)
+                valid_results.append(result)
+            else:
+                invalid_count += 1
+
+        # Should have 3 valid results and 2 invalid
+        assert len(valid_results) == 3
+        assert invalid_count == 2
+
+        # All valid results should return non-empty DataFrames
+        for result in valid_results:
+            assert len(result) > 0
