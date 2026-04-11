@@ -165,3 +165,75 @@ class TestDownloadScene:
             result = download_scene(scene, tmp_path, config={})
 
         assert len(result) == 0
+
+    def test_missing_band_in_assets(self, tmp_path):
+        """When a band key is missing from assets, a warning is logged and
+        that band is skipped."""
+        # Only include B8A — B12 and SCL are missing
+        scene = {
+            "id": "S2A_partial",
+            "assets": {
+                "B8A": "https://example.com/B8A.tif",
+            },
+        }
+        import urllib.request
+
+        def _fake_retrieve(url, dest):
+            Path(dest).write_bytes(b"FAKE_TIFF_DATA")
+
+        with (
+            patch.dict(sys.modules, {"httpx": None}),
+            patch.object(urllib.request, "urlretrieve", side_effect=_fake_retrieve),
+        ):
+            result = download_scene(scene, tmp_path, config={})
+
+        # Only nir should be downloaded; swir and scl are missing from assets
+        assert "nir" in result
+        assert "swir" not in result
+        assert "scl" not in result
+
+    def test_already_downloaded_skips(self, tmp_path):
+        """When band files already exist, download_scene skips re-downloading."""
+        scene = self._scene_meta()
+
+        # Pre-create the expected output files
+        for band_name in ("B8A", "B12", "SCL"):
+            dest = tmp_path / f"S2A_20240715_{band_name}.tif"
+            dest.write_bytes(b"EXISTING_DATA")
+
+        mock_httpx = MagicMock()
+
+        with patch.dict(sys.modules, {"httpx": mock_httpx}):
+            result = download_scene(scene, tmp_path, config={})
+
+        # All three bands should be returned
+        assert "nir" in result
+        assert "swir" in result
+        assert "scl" in result
+
+        # httpx.stream should never have been called (files already exist)
+        mock_httpx.stream.assert_not_called()
+
+    def test_httpx_download_path(self, tmp_path):
+        """download_scene should use httpx streaming when httpx is available."""
+        scene = self._scene_meta()
+
+        mock_httpx = MagicMock()
+        mock_resp = MagicMock()
+        mock_resp.iter_bytes.return_value = [b"FAKE_TIFF_CHUNK"]
+        mock_resp.raise_for_status = MagicMock()
+        mock_resp.__enter__ = MagicMock(return_value=mock_resp)
+        mock_resp.__exit__ = MagicMock(return_value=False)
+        mock_httpx.stream.return_value = mock_resp
+
+        with patch.dict(sys.modules, {"httpx": mock_httpx}):
+            result = download_scene(scene, tmp_path, config={})
+
+        # All three bands should have been downloaded
+        assert "nir" in result
+        assert "swir" in result
+        assert "scl" in result
+        # httpx.stream should have been called 3 times (once per band)
+        assert mock_httpx.stream.call_count == 3
+        for path in result.values():
+            assert path.exists()

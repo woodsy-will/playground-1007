@@ -183,3 +183,163 @@ class TestRunQueryMocked:
         assert result["is_valid"] is True
         assert result["raw_results"] is not None
         assert len(result["raw_results"]) > 0
+
+    def _make_config_path(
+        self,
+        tmp_path: Path,
+        gpkg_path: Path,
+        default_config: dict,
+    ) -> Path:
+        """Create a temporary YAML config file for pipeline tests."""
+        config = {
+            "safety": default_config["safety"],
+            "llm": default_config["llm"],
+            "geopackage": {"path": str(gpkg_path)},
+            "rag": {
+                "few_shot_examples": "nonexistent.yaml",
+                "schema_metadata": "nonexistent.yaml",
+                "top_k": 5,
+            },
+            "schema": default_config.get("schema", {}),
+        }
+        config_path = tmp_path / "test_config.yaml"
+        config_path.write_text(yaml.dump(config))
+        return config_path
+
+    def test_run_query_schema_not_found(
+        self,
+        gpkg_path: Path,
+        default_config: dict,
+        tmp_path: Path,
+    ) -> None:
+        """run_query returns an error when schema metadata file is missing."""
+        config_path = self._make_config_path(tmp_path, gpkg_path, default_config)
+
+        with patch(
+            "projects.p2_llm_spatial_query.src.schema_extractor.load_schema_metadata",
+            side_effect=FileNotFoundError("Schema metadata not found"),
+        ):
+            result = run_query("Show all harvest units", str(config_path))
+
+        assert "Error" in result["results_summary"]
+
+    def test_run_query_llm_connection_error(
+        self,
+        gpkg_path: Path,
+        default_config: dict,
+        tmp_path: Path,
+    ) -> None:
+        """run_query returns an error when the LLM endpoint is unreachable."""
+        config_path = self._make_config_path(tmp_path, gpkg_path, default_config)
+
+        mock_schema = {
+            "layers": {
+                "harvest_units": {
+                    "description": "Proposed timber harvest units",
+                    "columns": {
+                        "unit_id": {"type": "integer", "description": "ID"},
+                    },
+                },
+            },
+        }
+
+        with (
+            patch(
+                "projects.p2_llm_spatial_query.src.schema_extractor.load_schema_metadata",
+                return_value=mock_schema,
+            ),
+            patch(
+                "projects.p2_llm_spatial_query.src.prompt_builder.load_few_shot_examples",
+                return_value=[],
+            ),
+            patch(
+                "projects.p2_llm_spatial_query.src.sql_generator.generate_sql",
+                side_effect=ConnectionError("LLM endpoint unreachable"),
+            ),
+        ):
+            result = run_query("Show all harvest units", str(config_path))
+
+        assert "Error" in result["results_summary"]
+        assert result["sql"] == ""
+
+    def test_run_query_validation_failure(
+        self,
+        gpkg_path: Path,
+        default_config: dict,
+        tmp_path: Path,
+    ) -> None:
+        """run_query returns is_valid=False when generated SQL is invalid."""
+        config_path = self._make_config_path(tmp_path, gpkg_path, default_config)
+
+        mock_schema = {
+            "layers": {
+                "harvest_units": {
+                    "description": "Proposed timber harvest units",
+                    "columns": {
+                        "unit_id": {"type": "integer", "description": "ID"},
+                    },
+                },
+            },
+        }
+
+        with (
+            patch(
+                "projects.p2_llm_spatial_query.src.schema_extractor.load_schema_metadata",
+                return_value=mock_schema,
+            ),
+            patch(
+                "projects.p2_llm_spatial_query.src.prompt_builder.load_few_shot_examples",
+                return_value=[],
+            ),
+            patch(
+                "projects.p2_llm_spatial_query.src.sql_generator.generate_sql",
+                return_value="DELETE FROM harvest_units",
+            ),
+        ):
+            result = run_query("Delete all units", str(config_path))
+
+        assert result["is_valid"] is False
+        assert "Error" in result["results_summary"]
+
+    def test_run_query_execution_error(
+        self,
+        gpkg_path: Path,
+        default_config: dict,
+        tmp_path: Path,
+    ) -> None:
+        """run_query returns an error when query execution fails."""
+        config_path = self._make_config_path(tmp_path, gpkg_path, default_config)
+
+        mock_schema = {
+            "layers": {
+                "harvest_units": {
+                    "description": "Proposed timber harvest units",
+                    "columns": {
+                        "unit_id": {"type": "integer", "description": "ID"},
+                    },
+                },
+            },
+        }
+
+        with (
+            patch(
+                "projects.p2_llm_spatial_query.src.schema_extractor.load_schema_metadata",
+                return_value=mock_schema,
+            ),
+            patch(
+                "projects.p2_llm_spatial_query.src.prompt_builder.load_few_shot_examples",
+                return_value=[],
+            ),
+            patch(
+                "projects.p2_llm_spatial_query.src.sql_generator.generate_sql",
+                return_value="SELECT * FROM harvest_units",
+            ),
+            patch(
+                "projects.p2_llm_spatial_query.src.executor.execute_query",
+                side_effect=Exception("Database connection failed"),
+            ),
+        ):
+            result = run_query("Show all harvest units", str(config_path))
+
+        assert "Error" in result["results_summary"]
+        assert result["is_valid"] is True

@@ -199,6 +199,17 @@ class TestClipRasterToBounds:
         )
         assert clipped.shape == data.shape
 
+    def test_clip_raster_2d_array(self):
+        """Clipping a 2-D raster (no band dimension) produces correct shape."""
+        profile = make_profile(bounds=(0.0, 0.0, 100.0, 100.0), resolution=10.0)
+        data_2d = np.arange(100, dtype=np.float32).reshape(10, 10)
+
+        clipped, new_profile = clip_raster_to_bounds(
+            data_2d, profile, bounds=(0.0, 50.0, 50.0, 100.0)
+        )
+        assert clipped.ndim == 2
+        assert clipped.shape == (new_profile["height"], new_profile["width"])
+
 
 class TestReprojectRaster:
     """Tests for raster.reproject_raster."""
@@ -254,3 +265,33 @@ class TestGetLogger:
         lgr2 = get_logger(name)
         assert lgr1 is lgr2
         assert len(lgr2.handlers) == 1
+
+
+# -----------------------------------------------------------------------
+# Synthetic data generation
+# -----------------------------------------------------------------------
+
+class TestGenerateAll:
+    """Tests for shared.data.generate_synthetic.generate_all."""
+
+    def test_generate_all_creates_expected_files(self, tmp_path: Path):
+        from shared.data.generate_synthetic import generate_all
+
+        paths = generate_all(tmp_path)
+        assert isinstance(paths, dict)
+        assert len(paths) > 0
+
+        # Verify every returned path actually exists on disk
+        for name, p in paths.items():
+            assert Path(p).exists(), f"Expected file '{name}' not found at {p}"
+
+        # Verify key datasets are present
+        expected_keys = {
+            "lidar_csv", "cruise_plots", "chm", "dtm",  # P3
+            "pre_nir", "pre_swir", "post_nir", "post_swir", "fire_perimeter",  # P1
+            "occurrences",  # P4
+            "geopackage",  # P2
+        }
+        assert expected_keys.issubset(set(paths.keys())), (
+            f"Missing keys: {expected_keys - set(paths.keys())}"
+        )

@@ -5,6 +5,7 @@ from __future__ import annotations
 from pathlib import Path
 
 import numpy as np
+import pytest
 from pyproj import CRS
 
 from shared.utils.io import make_profile, write_raster
@@ -43,6 +44,49 @@ class TestBuildPredictorStack:
         expected = {"bio1_mean_temp", "bio12_annual_precip", "canopy_cover",
                     "elevation", "slope", "tpi"}
         assert set(band_names) == expected
+
+    def test_empty_predictor_dir_raises(self, tmp_path: Path):
+        """build_predictor_stack raises FileNotFoundError if no .tif files."""
+        from projects.p4_habitat_suitability.src.predictors import build_predictor_stack
+
+        empty_dir = tmp_path / "empty_predictors"
+        empty_dir.mkdir()
+        config = {
+            "data": {"predictor_dir": str(empty_dir)},
+            "modeling": {"crs": "EPSG:3310"},
+        }
+        with pytest.raises(FileNotFoundError, match="No .tif files"):
+            build_predictor_stack(config)
+
+    def test_mismatched_raster_alignment(self, tmp_path: Path):
+        """Rasters with different dimensions are reprojected to the reference grid."""
+        from projects.p4_habitat_suitability.src.predictors import build_predictor_stack
+
+        pred_dir = tmp_path / "predictors"
+        pred_dir.mkdir()
+
+        # Reference raster: 10x10 at 10m resolution
+        ref_profile = make_profile(bounds=(0, 0, 100, 100), resolution=10.0)
+        ref_data = np.ones((ref_profile["height"], ref_profile["width"]), dtype=np.float32)
+        write_raster(pred_dir / "aaa_ref.tif", ref_data, ref_profile)
+
+        # Mismatched raster: 5x5 at 20m resolution (same extent, different grid)
+        mis_profile = make_profile(bounds=(0, 0, 100, 100), resolution=20.0)
+        mis_data = np.ones(
+            (mis_profile["height"], mis_profile["width"]), dtype=np.float32
+        ) * 2.0
+        write_raster(pred_dir / "bbb_mis.tif", mis_data, mis_profile)
+
+        config = {
+            "data": {"predictor_dir": str(pred_dir)},
+            "modeling": {"crs": "EPSG:3310"},
+        }
+        stack, profile, band_names = build_predictor_stack(config)
+
+        # Both bands should have the reference dimensions
+        assert stack.shape == (2, ref_profile["height"], ref_profile["width"])
+        assert band_names == ["aaa_ref", "bbb_mis"]
+        assert np.all(np.isfinite(stack))
 
 
 class TestComputeTopoDerivatives:

@@ -2,11 +2,15 @@
 
 from __future__ import annotations
 
+from pathlib import Path
+
 import pytest
+import yaml
 
 from projects.p2_llm_spatial_query.src.prompt_builder import (
     build_system_prompt,
     build_user_prompt,
+    load_few_shot_examples,
     select_few_shots,
 )
 
@@ -101,3 +105,40 @@ class TestSelectFewShots:
     def test_top_k_larger_than_available(self, examples: list[dict]) -> None:
         result = select_few_shots("show everything", examples, top_k=100)
         assert len(result) == len(examples)
+
+
+class TestLoadFewShotExamples:
+    """Verify loading of few-shot examples from YAML files."""
+
+    def test_load_few_shot_examples_from_file(self, tmp_path: Path) -> None:
+        """load_few_shot_examples reads examples from a YAML file."""
+        examples_data = {
+            "examples": [
+                {
+                    "question": "How many harvest units are there?",
+                    "sql": "SELECT COUNT(*) FROM harvest_units",
+                },
+                {
+                    "question": "List all streams",
+                    "sql": "SELECT * FROM streams",
+                },
+            ]
+        }
+        examples_file = tmp_path / "few_shots.yaml"
+        examples_file.write_text(yaml.dump(examples_data))
+
+        config = {"rag": {"few_shot_examples": str(examples_file)}}
+        result = load_few_shot_examples(config)
+
+        assert isinstance(result, list)
+        assert len(result) == 2
+        assert result[0]["question"] == "How many harvest units are there?"
+        assert result[1]["sql"] == "SELECT * FROM streams"
+
+    def test_load_few_shot_examples_file_not_found(self, tmp_path: Path) -> None:
+        """load_few_shot_examples returns an empty list when the file doesn't exist."""
+        config = {"rag": {"few_shot_examples": str(tmp_path / "nonexistent.yaml")}}
+        result = load_few_shot_examples(config)
+
+        assert isinstance(result, list)
+        assert len(result) == 0

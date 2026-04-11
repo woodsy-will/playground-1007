@@ -124,9 +124,6 @@ class TestCreatePAMatrix:
         default_config: dict,
     ) -> None:
         """X should have shape (n_samples, n_bands) and y should be 1-D."""
-        # create_pa_matrix imports from predictors which may transitively need sklearn
-        pytest.importorskip("sklearn")
-
         from projects.p4_habitat_suitability.src.background import create_pa_matrix
 
         bg = generate_background_points(
@@ -153,8 +150,6 @@ class TestCreatePAMatrix:
         default_config: dict,
     ) -> None:
         """Response vector y should contain only 0s and 1s."""
-        pytest.importorskip("sklearn")
-
         from projects.p4_habitat_suitability.src.background import create_pa_matrix
 
         bg = generate_background_points(

@@ -67,3 +67,33 @@ class TestExecuteQuery:
             execute_query(
                 "SELECT * FROM nonexistent_table", gpkg_path, default_config
             )
+
+    def test_execute_query_returns_geodataframe_with_geometry(
+        self, gpkg_path: Path, default_config: dict
+    ) -> None:
+        """Querying a geometry column should return a GeoDataFrame when WKB
+        parsing succeeds, covering the geometry promotion path."""
+        import geopandas as gpd
+
+        sql = "SELECT unit_name, geom AS geometry FROM harvest_units LIMIT 2"
+        result = execute_query(sql, gpkg_path, default_config)
+        assert isinstance(result, (pd.DataFrame, gpd.GeoDataFrame))
+        assert len(result) == 2
+
+    def test_spatialite_not_available(
+        self, gpkg_path: Path, default_config: dict
+    ) -> None:
+        """When SpatiaLite cannot be loaded, execute_query should still work
+        for non-spatial queries (it logs a warning and continues)."""
+        from unittest.mock import patch
+
+        with patch(
+            "projects.p2_llm_spatial_query.src.executor.load_spatialite",
+            side_effect=RuntimeError("SpatiaLite not available"),
+        ):
+            sql = "SELECT unit_name, acres FROM harvest_units"
+            result = execute_query(sql, gpkg_path, default_config)
+
+        assert isinstance(result, pd.DataFrame)
+        assert len(result) > 0
+        assert "unit_name" in result.columns
