@@ -101,3 +101,73 @@ class TestFitRecoveryModel:
         result = fit_recovery_model(synthetic_ts, config)
         for _, row in result.iterrows():
             assert row["years_to_90pct_recovery"] > 0
+
+    def test_fit_recovery_too_few_points(self, config: dict) -> None:
+        """Severity class with <3 data points should be skipped."""
+        records = []
+        # Class 1 has only 2 points — too few to fit
+        for yr in range(1, 3):
+            records.append(
+                {
+                    "year": yr,
+                    "severity_class": 1,
+                    "mean_index": 0.3 + 0.05 * yr,
+                    "std_index": 0.01,
+                    "pixel_count": 50,
+                }
+            )
+        # Class 2 has 5 points — enough to fit
+        for yr in range(1, 6):
+            records.append(
+                {
+                    "year": yr,
+                    "severity_class": 2,
+                    "mean_index": 0.6 * (1 - np.exp(-0.4 * yr)) + 0.2,
+                    "std_index": 0.01,
+                    "pixel_count": 100,
+                }
+            )
+        df = pd.DataFrame(records)
+        result = fit_recovery_model(df, config)
+        # Class 1 should be absent from results, only class 2 fitted
+        assert 1 not in result["severity_class"].values
+        assert 2 in result["severity_class"].values
+
+    def test_fit_recovery_no_convergence(self, config: dict) -> None:
+        """When curve_fit raises RuntimeError, the class should be skipped."""
+        from unittest.mock import patch
+
+        records = []
+        for yr in range(1, 8):
+            records.append(
+                {
+                    "year": yr,
+                    "severity_class": 0,
+                    "mean_index": 0.5,
+                    "std_index": 0.01,
+                    "pixel_count": 100,
+                }
+            )
+        df = pd.DataFrame(records)
+        with patch(
+            "projects.p1_burn_severity.src.recovery.curve_fit",
+            side_effect=RuntimeError("Optimal parameters not found"),
+        ):
+            result = fit_recovery_model(df, config)
+        # Convergence failure means the class is skipped entirely
+        assert len(result) == 0
+
+
+class TestTimeseriesAllNanClass:
+    """Cover the `continue` when all values are NaN for a severity class."""
+
+    def test_timeseries_all_nan_class(self, config: dict) -> None:
+        """A severity class whose index values are ALL NaN should be skipped."""
+        severity = np.array([[0, 1], [1, 0]], dtype=np.uint8)
+        # Raster where class-1 pixels are NaN
+        raster = np.array([[0.5, np.nan], [np.nan, 0.6]], dtype=np.float32)
+        ts = build_recovery_timeseries([raster], severity, config)
+        # Class 1 should not appear (all NaN)
+        assert 1 not in ts["severity_class"].values
+        # Class 0 should appear
+        assert 0 in ts["severity_class"].values

@@ -97,3 +97,37 @@ class TestExecuteQuery:
         assert isinstance(result, pd.DataFrame)
         assert len(result) > 0
         assert "unit_name" in result.columns
+
+    def test_wkb_geometry_promotion_to_geodataframe(
+        self, gpkg_path: Path, default_config: dict
+    ) -> None:
+        """When the result has a valid WKB geometry column, execute_query
+        should return a GeoDataFrame (covers lines 115-118)."""
+        from unittest.mock import patch
+
+        import geopandas as gpd
+        from shapely.geometry import Point
+
+        # Create a DataFrame with a real WKB geometry column
+        geom_series = gpd.GeoSeries([Point(0, 0), Point(1, 1)], crs="EPSG:3310")
+        mock_df = pd.DataFrame({
+            "name": ["a", "b"],
+            "geometry": geom_series.to_wkb(),
+        })
+
+        with patch(
+            "projects.p2_llm_spatial_query.src.executor.load_spatialite",
+            side_effect=RuntimeError("SpatiaLite not available"),
+        ), patch(
+            "projects.p2_llm_spatial_query.src.executor.pd.read_sql_query",
+            return_value=mock_df,
+        ):
+            result = execute_query(
+                "SELECT name, geometry FROM harvest_units",
+                gpkg_path,
+                default_config,
+            )
+
+        assert isinstance(result, gpd.GeoDataFrame)
+        assert len(result) == 2
+        assert result.crs is not None
